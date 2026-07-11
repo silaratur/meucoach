@@ -258,6 +258,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
                 {new Date(s.data).toLocaleDateString('pt-BR')} — <strong>{s.corrida!.distanciaKm} km</strong> em{' '}
                 {s.corrida!.duracaoMin} min
                 {s.corrida!.ritmoMinKm ? ` · ${Math.floor(s.corrida!.ritmoMinKm)}:${String(Math.round((s.corrida!.ritmoMinKm % 1) * 60)).padStart(2, '0')}/km` : ''}
+                {s.corrida!.velocidadeKmH ? ` · ${s.corrida!.velocidadeKmH.toFixed(1)} km/h` : ''}
               </span>
             </div>
           ))}

@@ -39,6 +39,16 @@ function formatarRitmo(minPorKm: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Velocidade (km/h) é só o inverso do ritmo (min/km) — mesma métrica, outra unidade,
+// mais intuitiva pra quem já pensa em "quantos km por hora" em vez de "min por km".
+function velocidadeDe(minPorKm: number): number {
+  return isFinite(minPorKm) && minPorKm > 0 ? 60 / minPorKm : 0;
+}
+
+function formatarVelocidade(kmh: number): string {
+  return kmh > 0 ? kmh.toFixed(1) : '—';
+}
+
 function ritmoEmFala(minPorKm: number): string {
   if (!isFinite(minPorKm) || minPorKm <= 0) return '';
   const m = Math.floor(minPorKm);
@@ -119,7 +129,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     const km = distRef.current / 1000;
     const ritmo = segRef.current / 60 / km;
     const incentivo = INCENTIVOS_CORRIDA[Math.floor(Math.random() * INCENTIVOS_CORRIDA.length)];
-    falar(`${distanciaEmFala(km)}. Ritmo de ${ritmoEmFala(ritmo)}. ${incentivo}`);
+    falar(`${distanciaEmFala(km)}. Ritmo de ${ritmoEmFala(ritmo)}, ${formatarVelocidade(velocidadeDe(ritmo))} quilômetros por hora. ${incentivo}`);
     bip(1);
   }
 
@@ -164,7 +174,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     const ritmo = km > 0.05 ? segRef.current / 60 / km : 0;
     falar(
       km >= 0.2
-        ? `Corrida concluída! ${distanciaEmFala(km)} em ${Math.round(segRef.current / 60)} minutos, ritmo médio de ${ritmoEmFala(ritmo)}. Você mandou muito bem, ${perfil.nome}!`
+        ? `Corrida concluída! ${distanciaEmFala(km)} em ${Math.round(segRef.current / 60)} minutos, ritmo médio de ${ritmoEmFala(ritmo)}, ${formatarVelocidade(velocidadeDe(ritmo))} quilômetros por hora. Você mandou muito bem, ${perfil.nome}!`
         : 'Corrida encerrada.',
     );
   }
@@ -173,6 +183,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     const km = Math.round((distRef.current / 1000) * 100) / 100;
     const minutos = Math.max(1, Math.round(segRef.current / 60));
     const ritmo = km > 0.05 ? Math.round((segRef.current / 60 / km) * 100) / 100 : undefined;
+    const velocidade = ritmo ? Math.round(velocidadeDe(ritmo) * 10) / 10 : undefined;
     const sessao: SessaoTreino = {
       id: uid(),
       nomeTreino: tituloTreino || `Corrida ${km} km`,
@@ -180,8 +191,8 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
       data: new Date().toISOString(),
       duracaoMin: minutos,
       itens: [],
-      atividadeLivre: `Corrida de ${km} km em ${minutos} min${ritmo ? ` (ritmo ${formatarRitmo(ritmo)}/km)` : ''}`,
-      corrida: { distanciaKm: km, duracaoMin: minutos, ritmoMinKm: ritmo },
+      atividadeLivre: `Corrida de ${km} km em ${minutos} min${ritmo ? ` (ritmo ${formatarRitmo(ritmo)}/km · ${formatarVelocidade(velocidade ?? 0)} km/h)` : ''}`,
+      corrida: { distanciaKm: km, duracaoMin: minutos, ritmoMinKm: ritmo, velocidadeKmH: velocidade },
     };
     aoTerminar(sessao);
   }
@@ -230,6 +241,10 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
               <small>Ritmo</small>
               <strong>{formatarRitmo(ritmoAtual)}/km</strong>
             </div>
+            <div>
+              <small>Velocidade</small>
+              <strong>{formatarVelocidade(velocidadeDe(ritmoAtual))} km/h</strong>
+            </div>
           </div>
           {estado === 'pausado' && <p className="rotulo-descanso">⏸️ Pausado</p>}
           <div className="botoes centro-botoes">
@@ -250,7 +265,12 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
           <h3>🎉 Corrida concluída!</h3>
           <p>
             <strong>{km.toFixed(2)} km</strong> em {Math.round(segundos / 60)} min
-            {km > 0.05 && <> · ritmo médio <strong>{formatarRitmo(segundos / 60 / km)}/km</strong></>}
+            {km > 0.05 && (
+              <>
+                {' '}· ritmo médio <strong>{formatarRitmo(segundos / 60 / km)}/km</strong>
+                {' '}· <strong>{formatarVelocidade(velocidadeDe(segundos / 60 / km))} km/h</strong>
+              </>
+            )}
           </p>
           <button className="primario grande" onClick={salvar}><IconeSalvar size={18} /> Salvar no histórico</button>
           <button onClick={aoCancelar}>Descartar</button>

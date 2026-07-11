@@ -178,7 +178,7 @@ export interface SessaoTreino {
   duracaoMin?: number;
   itens: ItemSessao[];
   atividadeLivre?: string; // "caminhada 40min", etc.
-  corrida?: { distanciaKm: number; duracaoMin: number; ritmoMinKm?: number }; // sessão de corrida com GPS
+  corrida?: { distanciaKm: number; duracaoMin: number; ritmoMinKm?: number; velocidadeKmH?: number }; // sessão de corrida com GPS
   rpe?: number; // percepção de esforço, 1 a 10, informada logo após o treino
 }
 
