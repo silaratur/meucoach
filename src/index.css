@@ -376,6 +376,21 @@ button:disabled { opacity: 0.6; }
 .icones-dia .feito { filter: drop-shadow(0 0 0 #22c55e); }
 .icones-dia .descanso { opacity: 0.4; font-size: 0.85rem; }
 .detalhe-dia-semana { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--borda); }
+
+/* ---------- Calendário do Coach (relatório do dia) ---------- */
+.calendario-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.calendario-topo h2 { margin: 0; }
+.calendario-topo button.mini { padding: 4px 12px; font-size: 1rem; line-height: 1; }
+.calendario-topo button.mini:disabled { opacity: 0.3; }
+.indicador-relatorio {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  margin-top: 3px;
+  background: var(--verde);
+  opacity: 0;
+}
+.indicador-relatorio.presente { opacity: 1; }
 .rpe-pergunta { font-size: 0.9rem; margin: 10px 0 4px; }
 .rpe-escala { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-bottom: 8px; }
 .rpe-botao { width: 34px; height: 34px; padding: 0; border-radius: 8px; }

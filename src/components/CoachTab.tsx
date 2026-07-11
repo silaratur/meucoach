@@ -1,9 +1,25 @@
 import { useState } from 'react';
 import type { Avaliacao, DadosPerfil, Perfil } from '../types';
+import { DIAS_SEMANA } from '../types';
 import { avaliarDia } from '../api';
 import { hojeISO, uid } from '../storage';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from '../calc';
 import { IconeExcluir } from './Icones';
+
+function formatarDataLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Segunda-feira da semana N semanas atrás/na frente de hoje (offsetSemanas negativo = passado).
+function segundaDaSemana(offsetSemanas: number): Date {
+  const hoje = new Date();
+  const diaSemana = hoje.getDay(); // 0=domingo..6=sábado
+  const deslocamento = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const seg = new Date(hoje);
+  seg.setDate(hoje.getDate() + deslocamento + offsetSemanas * 7);
+  seg.setHours(0, 0, 0, 0);
+  return seg;
+}
 
 interface Props {
   perfil: Perfil;
@@ -61,6 +77,36 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
   const [erro, setErro] = useState('');
 
   const hoje = hojeISO();
+  // Relatório do dia: calendário por semana em vez de empilhar todas as avaliações — a lista
+  // crescia sem fim e a tela ficava enorme com o passar dos dias.
+  const [semanaOffset, setSemanaOffset] = useState(0);
+  const [diaSelecionado, setDiaSelecionado] = useState(hoje);
+
+  function irParaSemana(novoOffset: number) {
+    const novoInicio = segundaDaSemana(novoOffset);
+    const chavesDaSemana = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(novoInicio);
+      d.setDate(novoInicio.getDate() + i);
+      return formatarDataLocal(d);
+    });
+    setSemanaOffset(novoOffset);
+    setDiaSelecionado(chavesDaSemana.includes(hoje) ? hoje : chavesDaSemana[chavesDaSemana.length - 1]);
+  }
+
+  const inicioSemana = segundaDaSemana(semanaOffset);
+  const diasDaSemana = DIAS_SEMANA.map((nomeDia, i) => {
+    const data = new Date(inicioSemana);
+    data.setDate(inicioSemana.getDate() + i);
+    const chave = formatarDataLocal(data);
+    return {
+      nomeDia,
+      chave,
+      diaMes: data.getDate(),
+      ehHoje: chave === hoje,
+      temAvaliacao: dados.avaliacoes.some((a) => dataLocalDe(a.data) === chave),
+    };
+  });
+  const avaliacaoSelecionada = dados.avaliacoes.find((a) => dataLocalDe(a.data) === diaSelecionado);
   const dia = dados.dias[hoje] ?? { data: hoje, registros: [] };
   const totaisHoje = totaisDoDia(dia.registros);
   const treinosHoje = dados.sessoes.filter((s) => dataLocalDe(s.data) === hoje).length;
@@ -167,21 +213,59 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
         {erro && <p className="erro">{erro}</p>}
       </div>
 
-      {dados.avaliacoes.map((a) => (
-        <div className="cartao" key={a.id}>
-          <h2>
-            📋 {new Date(a.data).toLocaleDateString('pt-BR')}{' '}
-            <small>{new Date(a.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
-          </h2>
-          <Markdown texto={a.texto} />
+      <div className="cartao">
+        <div className="calendario-topo">
+          <button className="mini secundario" onClick={() => irParaSemana(semanaOffset - 1)} title="Semana anterior">
+            ‹
+          </button>
+          <h2>📋 Relatório do dia</h2>
           <button
-            className="mini"
-            onClick={() => atualizar((d) => ({ ...d, avaliacoes: d.avaliacoes.filter((x) => x.id !== a.id) }))}
+            className="mini secundario"
+            onClick={() => irParaSemana(semanaOffset + 1)}
+            disabled={semanaOffset >= 0}
+            title="Próxima semana"
           >
-            <IconeExcluir size={14} /> Apagar
+            ›
           </button>
         </div>
-      ))}
+        <div className="visao-semana">
+          {diasDaSemana.map((d) => (
+            <button
+              key={d.chave}
+              className={`dia-semana-item ${d.ehHoje ? 'hoje' : ''} ${diaSelecionado === d.chave ? 'selecionado' : ''}`}
+              onClick={() => setDiaSelecionado(d.chave)}
+            >
+              <small>{d.nomeDia.slice(0, 3)}</small>
+              <strong>{d.diaMes}</strong>
+              <span className={`indicador-relatorio ${d.temAvaliacao ? 'presente' : ''}`} />
+            </button>
+          ))}
+        </div>
+
+        <div className="detalhe-dia-semana">
+          {avaliacaoSelecionada ? (
+            <>
+              <p className="meta-texto">
+                {new Date(avaliacaoSelecionada.data).toLocaleDateString('pt-BR')}{' '}
+                <small>às {new Date(avaliacaoSelecionada.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
+              </p>
+              <Markdown texto={avaliacaoSelecionada.texto} />
+              <button
+                className="mini"
+                onClick={() => atualizar((d) => ({ ...d, avaliacoes: d.avaliacoes.filter((x) => x.id !== avaliacaoSelecionada.id) }))}
+              >
+                <IconeExcluir size={14} /> Apagar
+              </button>
+            </>
+          ) : (
+            <p className="meta-texto">
+              {diaSelecionado === hoje
+                ? 'Nenhuma avaliação ainda hoje — gere uma acima.'
+                : 'Nenhuma avaliação registrada para este dia.'}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
