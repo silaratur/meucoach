@@ -45,9 +45,9 @@ ssh -o IdentitiesOnly=yes -i $env:USERPROFILE\.ssh\meucoach_deploy root@72.60.7.
 
 ## Deploy automático (desde 11/07/2026)
 
-Todo push na branch `main` do repositório [github.com/silaratur/meucoach](https://github.com/silaratur/meucoach)
-dispara `.github/workflows/deploy.yml`: builda, empacota, faz backup do banco, envia por SSH,
-reinstala dependências no VPS e reinicia o container — o mesmo roteiro manual abaixo, automatizado.
+Todo push em **qualquer branch** do repositório [github.com/silaratur/meucoach](https://github.com/silaratur/meucoach)
+dispara `.github/workflows/deploy.yml`: builda, empacota, faz backup do banco (nomeado com a
+branch de origem), envia por SSH, reinstala dependências no VPS e reinicia o container.
 
 - Usa uma chave SSH **dedicada só para o CI** (`meucoach_ci`, diferente da `meucoach_deploy` usada
   manualmente) — pública adicionada em `/root/.ssh/authorized_keys` do VPS, privada guardada como
@@ -55,6 +55,14 @@ reinstala dependências no VPS e reinicia o container — o mesmo roteiro manual
   acesso do GitHub Actions, remova só essa chave do `authorized_keys` — não afeta o acesso manual.
 - Rodar manualmente: aba **Actions** do repositório → workflow "Deploy para produção" → **Run workflow**.
 - O deploy manual abaixo continua funcionando normalmente (útil se não quiser passar pelo GitHub).
+
+### ⚠️ Política de branches (a partir de 11/07/2026)
+
+Cada rodada de mudanças vai para uma **branch nova** (ex.: `deploy/2026-07-11-corrida-velocidade`),
+que já pode ser publicada em produção sozinha — a `main` só recebe commit quando o dono do projeto
+pedir explicitamente (merge manual). Isso dá controle de versão real: se uma mudança sair ruim, é só
+fazer deploy de uma branch anterior (ou reverter/mesclar diferente) sem depender de reescrever a `main`.
+`git log --all --oneline` ou a aba **Branches** do GitHub mostram o histórico de rodadas.
 
 ## Atualizar o app manualmente (depois de mudanças no código)
 

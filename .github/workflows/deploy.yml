@@ -1,8 +1,11 @@
 name: Deploy para produção
 
+# Dispara em push de QUALQUER branch (não só main) — cada rodada de mudanças vira uma branch
+# própria que pode ir pra produção antes (ou sem nunca) ser mesclada na main. Isso dá controle
+# de versão de verdade: se uma mudança sair ruim, o passo anterior está intacto numa branch/tag
+# própria, fácil de identificar e reimplantar.
 on:
-  push:
-    branches: [main]
+  push: {}
   workflow_dispatch: {}
 
 jobs:
@@ -10,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Identificar a branch/commit implantado
+        run: echo "Deploy de '${{ github.ref_name }}' (commit ${{ github.sha }})"
 
       - uses: actions/setup-node@v4
         with:
@@ -33,8 +39,9 @@ jobs:
 
       - name: Backup do banco de produção
         run: |
+          BRANCH_SEGURA=$(echo "${{ github.ref_name }}" | tr -c 'a-zA-Z0-9_-' '-')
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
-            "cp /opt/meu-coach/data/meucoach.db /opt/meu-coach/data/backup-\$(date +%Y%m%d-%H%M%S)-ci.db"
+            "cp /opt/meu-coach/data/meucoach.db /opt/meu-coach/data/backup-\$(date +%Y%m%d-%H%M%S)-ci-${BRANCH_SEGURA}.db"
 
       - name: Enviar pacote
         run: |
