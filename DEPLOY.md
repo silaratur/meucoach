@@ -43,7 +43,20 @@ Chave dedicada sem senha no PC: `~/.ssh/meucoach_deploy` (pública instalada em 
 ssh -o IdentitiesOnly=yes -i $env:USERPROFILE\.ssh\meucoach_deploy root@72.60.7.224
 ```
 
-## Atualizar o app (depois de mudanças no código)
+## Deploy automático (desde 11/07/2026)
+
+Todo push na branch `main` do repositório [github.com/silaratur/meucoach](https://github.com/silaratur/meucoach)
+dispara `.github/workflows/deploy.yml`: builda, empacota, faz backup do banco, envia por SSH,
+reinstala dependências no VPS e reinicia o container — o mesmo roteiro manual abaixo, automatizado.
+
+- Usa uma chave SSH **dedicada só para o CI** (`meucoach_ci`, diferente da `meucoach_deploy` usada
+  manualmente) — pública adicionada em `/root/.ssh/authorized_keys` do VPS, privada guardada como
+  secret `VPS_SSH_KEY` no GitHub (`VPS_HOST`/`VPS_USER` também são secrets). Se precisar revogar o
+  acesso do GitHub Actions, remova só essa chave do `authorized_keys` — não afeta o acesso manual.
+- Rodar manualmente: aba **Actions** do repositório → workflow "Deploy para produção" → **Run workflow**.
+- O deploy manual abaixo continua funcionando normalmente (útil se não quiser passar pelo GitHub).
+
+## Atualizar o app manualmente (depois de mudanças no código)
 
 Na pasta do projeto, no PC:
 

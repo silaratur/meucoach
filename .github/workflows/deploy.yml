@@ -1,0 +1,52 @@
+name: Deploy para produção
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Empacotar
+        run: tar -czf meu-coach.tar.gz dist server package.json package-lock.json
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Backup do banco de produção
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cp /opt/meu-coach/data/meucoach.db /opt/meu-coach/data/backup-\$(date +%Y%m%d-%H%M%S)-ci.db"
+
+      - name: Enviar pacote
+        run: |
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes meu-coach.tar.gz \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/"
+
+      - name: Extrair, instalar dependências e reiniciar
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "tar -xzf /tmp/meu-coach.tar.gz -C /opt/meu-coach && cd /opt/meu-coach && npm install --omit=dev && docker compose restart"
+
+      - name: Verificar se a produção respondeu
+        run: |
+          sleep 5
+          curl -sf -o /dev/null https://meucoach.silaratur.cloud/ && echo "OK: produção respondeu" || (echo "FALHA: produção não respondeu" && exit 1)
