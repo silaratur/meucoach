@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { DadosPerfil, Perfil, Treino } from '../types';
 import { DIAS_SEMANA } from '../types';
 import { dataLocalDe } from '../calc';
-import { IconeComecar, IconeConcluido } from './Icones';
+import { IconeComecar, IconeConcluido, IconeMusculacao, IconeCorrida, IconeSono } from './Icones';
+import { CalendarDays } from 'lucide-react';
 
 function formatarDataLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -99,7 +100,7 @@ export default function VisaoSemana({ perfil, dados, aoComecarDia }: Props) {
 
   return (
     <div className="cartao">
-      <h2>🗓️ Sua semana</h2>
+      <h2><CalendarDays size={19} /> Sua semana</h2>
       <div className="visao-semana">
         {dias.map((d) => (
           <button
@@ -110,9 +111,9 @@ export default function VisaoSemana({ perfil, dados, aoComecarDia }: Props) {
             <small>{d.nomeDia.slice(0, 3)}</small>
             <strong>{d.diaMes}</strong>
             <div className="icones-dia">
-              {d.planejadoMusculacao && <span className={d.feitoMusculacao ? 'feito' : 'pendente'}>🏋️</span>}
-              {d.planejadoCorrida && <span className={d.feitoCorrida ? 'feito' : 'pendente'}>🏃</span>}
-              {!d.planejadoMusculacao && !d.planejadoCorrida && <span className="descanso">😴</span>}
+              {d.planejadoMusculacao && <span className={d.feitoMusculacao ? 'feito' : 'pendente'}><IconeMusculacao size={13} /></span>}
+              {d.planejadoCorrida && <span className={d.feitoCorrida ? 'feito' : 'pendente'}><IconeCorrida size={13} /></span>}
+              {!d.planejadoMusculacao && !d.planejadoCorrida && <span className="descanso"><IconeSono size={13} /></span>}
             </div>
           </button>
         ))}
@@ -132,14 +133,14 @@ export default function VisaoSemana({ perfil, dados, aoComecarDia }: Props) {
         ) : diaPlanoMusc ? (
           <>
             <p className="detalhes-dia">
-              🏋️ <strong>{diaPlanoMusc.objetivo}</strong> · {diaPlanoMusc.gruposMusculares} · {diaPlanoMusc.exercicios.length}{' '}
+              <IconeMusculacao size={14} /> <strong>{diaPlanoMusc.objetivo}</strong> · {diaPlanoMusc.gruposMusculares} · {diaPlanoMusc.exercicios.length}{' '}
               exercícios · ~{diaPlanoMusc.tempoEstimadoMin} min
             </p>
             {aoComecarDia && <button className="mini" onClick={comecarDiaPlano}><IconeComecar size={13} /> Começar este treino</button>}
           </>
         ) : diaPlanoCorrida ? (
           <p className="detalhes-dia">
-            🏃 <strong>{diaPlanoCorrida.titulo}</strong> · {diaPlanoCorrida.tipo}
+            <IconeCorrida size={14} /> <strong>{diaPlanoCorrida.titulo}</strong> · {diaPlanoCorrida.tipo}
             {diaPlanoCorrida.distanciaKm ? ` · ${diaPlanoCorrida.distanciaKm} km` : ''}
           </p>
         ) : (

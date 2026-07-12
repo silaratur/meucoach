@@ -140,17 +140,31 @@ export function linkVideoExercicio(nome: string): string {
   return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(`como fazer ${nome} execução correta forma`);
 }
 
-// Ícone de equipamento inferido pelo nome do exercício — não há campo estruturado de
+// Categoria de equipamento inferida pelo nome do exercício — não há campo estruturado de
 // equipamento hoje, então isso é uma heurística client-side (sem mudar schema/prompt).
-export function iconeEquipamento(nomeExercicio: string): string {
+// O componente mapeia cada categoria para um ícone (ver ICONE_EQUIPAMENTO em Icones.tsx).
+export type TipoEquipamento = 'cabo' | 'maquina' | 'peso_livre' | 'suspensao' | 'cardio' | 'geral';
+
+export function tipoEquipamento(nomeExercicio: string): TipoEquipamento {
   const n = nomeExercicio.toLowerCase();
-  if (/(cabo|polia|puxada|pulley)/.test(n)) return '🔗';
-  if (/(m[aá]quina|leg press|hack|smith|peck deck)/.test(n)) return '⚙️';
-  if (/(halter|dumbbell)/.test(n)) return '🏋️';
-  if (/(barra fixa|paralelas|argolas|suspens[aã]o|trx)/.test(n)) return '🤸';
-  if (/(barra|barbell)/.test(n)) return '🏋️‍♂️';
-  if (/(corrida|esteira|bike|el[íi]ptico|remo(?!ada))/.test(n)) return '🏃';
-  return '💪';
+  if (/(cabo|polia|puxada|pulley)/.test(n)) return 'cabo';
+  if (/(m[aá]quina|leg press|hack|smith|peck deck)/.test(n)) return 'maquina';
+  if (/(halter|dumbbell)/.test(n)) return 'peso_livre';
+  if (/(barra fixa|paralelas|argolas|suspens[aã]o|trx)/.test(n)) return 'suspensao';
+  if (/(barra|barbell)/.test(n)) return 'peso_livre';
+  if (/(corrida|esteira|bike|el[íi]ptico|remo(?!ada))/.test(n)) return 'cardio';
+  return 'geral';
+}
+
+// Grupo corporal (superior/inferior/core) inferido pelo nome do exercício — mesma lógica de
+// heurística client-side usada em tipoEquipamento, para o resumo de volume semanal do Treino.
+export type GrupoCorporal = 'superior' | 'inferior' | 'core';
+
+export function grupoCorporal(nomeExercicio: string): GrupoCorporal {
+  const n = nomeExercicio.toLowerCase();
+  if (/(abd[oô]men|abdominal|core|prancha|obliquo|obl[íi]quo)/.test(n)) return 'core';
+  if (/(perna|quadr[íi]ceps|posterior|gl[úu]teo|panturrilha|cadeira|leg press|afundo|stiff|agachamento|hack)/.test(n)) return 'inferior';
+  return 'superior';
 }
 
 // Últimas séries feitas de um exercício (para o "Histórico" durante a execução).

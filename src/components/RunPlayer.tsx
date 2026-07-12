@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Perfil, SessaoTreino } from '../types';
 import { uid } from '../storage';
 import { bip, falar, silenciar, vozDisponivel } from '../speech';
-import { IconeComecar, IconeParar, IconePausa, IconeSalvar } from './Icones';
+import { IconeComecar, IconeParar, IconePausa, IconeSalvar, IconeCorrida } from './Icones';
+import { Satellite, Smartphone, Rocket, PartyPopper } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -206,10 +207,10 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
   return (
     <div className="cartao">
       <div className="player-topo">
-        <h2>🏃 {tituloTreino || 'Corrida livre'}</h2>
+        <h2><IconeCorrida size={19} /> {tituloTreino || 'Corrida livre'}</h2>
         {estado !== 'pronto' && (
           <span className={`chip gps-${gpsOk}`}>
-            {gpsOk === 'ok' ? '📡 GPS ok' : gpsOk === 'erro' ? '📡 Sem GPS' : '📡 Buscando...'}
+            <Satellite size={13} /> {gpsOk === 'ok' ? 'GPS ok' : gpsOk === 'erro' ? 'Sem GPS' : 'Buscando...'}
           </span>
         )}
       </div>
@@ -220,8 +221,8 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
             Vou medir sua distância e ritmo pelo GPS e te acompanhar por voz a cada 500 metros.
             {!vozDisponivel() && ' (voz indisponível neste navegador)'}
           </p>
-          <p className="meta-texto">📱 Mantenha o app aberto durante a corrida — a tela ficará sempre acesa.</p>
-          <button className="primario grande" onClick={iniciar}>🚀 Começar a correr</button>
+          <p className="meta-texto"><Smartphone size={14} /> Mantenha o app aberto durante a corrida — a tela ficará sempre acesa.</p>
+          <button className="primario grande" onClick={iniciar}><Rocket size={17} /> Começar a correr</button>
           <button onClick={aoCancelar}>Voltar</button>
         </div>
       )}
@@ -246,7 +247,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
               <strong>{formatarVelocidade(velocidadeDe(ritmoAtual))} km/h</strong>
             </div>
           </div>
-          {estado === 'pausado' && <p className="rotulo-descanso">⏸️ Pausado</p>}
+          {estado === 'pausado' && <p className="rotulo-descanso"><IconePausa size={15} /> Pausado</p>}
           <div className="botoes centro-botoes">
             {estado === 'correndo' ? (
               <button onClick={pausar}><IconePausa size={16} /> Pausar</button>
@@ -262,7 +263,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
 
       {estado === 'fim' && (
         <div className="centro">
-          <h3>🎉 Corrida concluída!</h3>
+          <h3><PartyPopper size={20} /> Corrida concluída!</h3>
           <p>
             <strong>{km.toFixed(2)} km</strong> em {Math.round(segundos / 60)} min
             {km > 0.05 && (

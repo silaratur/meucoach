@@ -6,6 +6,8 @@ import { analisarFoto, estimarCalorias, sugerirRefeicoes } from '../api';
 import { ditadoDisponivel, iniciarDitado } from '../speech';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, totaisDoDia } from '../calc';
 import { OBJETIVOS } from '../types';
+import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha } from './Icones';
+import { CalendarDays, RefreshCw, Calculator, Flame, Beef, Wheat, Droplet } from 'lucide-react';
 
 function OBJETIVO_LABEL(v: string): string {
   return OBJETIVOS.find((o) => o.value === v)?.label.split(' (')[0] ?? v;
@@ -33,6 +35,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const [analisando, setAnalisando] = useState(false);
   const [erro, setErro] = useState('');
   const [ditando, setDitando] = useState(false);
+  const [entradaAberta, setEntradaAberta] = useState(false);
   const [estimando, setEstimando] = useState(false);
   const [macrosPendentes, setMacrosPendentes] = useState<Pick<
     Registro,
@@ -79,6 +82,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
     setDescricao('');
     setMidiasPendentes([]);
     setMacrosPendentes(null);
+    setEntradaAberta(false);
   }
 
   function remover(id: string) {
@@ -102,9 +106,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
       const rotulo = TIPOS_REFEICAO.find((t) => t.value === tipo)?.label ?? tipo;
       const a = await analisarFoto(perfil, base64, blob.type || 'image/jpeg', rotulo);
       if (!a.ehComida) {
-        setErro('🤖 ' + a.descricao);
+        setErro(a.descricao);
       } else {
-        setDescricao(`${a.descricao}\n🤖 ${a.comentario}`);
+        setDescricao(`${a.descricao}\n${a.comentario}`);
         setMacrosPendentes({
           calorias: a.calorias,
           proteinas_g: a.proteinas_g,
@@ -167,66 +171,118 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const treinoHoje = treinoPrevistoHoje || dados.sessoes.some((s) => dataLocalDe(s.data) === data);
   const meta = metaDiaria(perfil, dados.sessoes, dados.atividadesDiarias, treinoHoje);
   const pctMeta = meta && totais.calorias > 0 ? Math.min(100, Math.round((totais.calorias / meta.kcal) * 100)) : 0;
+  const pctProteina = meta && totais.proteinas_g > 0 ? Math.min(100, Math.round((totais.proteinas_g / meta.proteinas_g) * 100)) : 0;
 
   return (
     <div>
       <div className="cartao">
-        <h2>📅 {dataBonita}</h2>
+        <h2><CalendarDays size={19} /> {dataBonita}</h2>
+
+        <div className="macro-resumo">
+          <div className="macro-linha-titulo">
+            <strong><Flame size={15} style={{ color: '#f59e0b' }} /> Calorias</strong>
+            <span>{Math.round(totais.calorias)}/{meta?.kcal ?? '—'} kcal</span>
+          </div>
+          <div className="barra-meta">
+            <div className={`barra-meta-cheia ${pctMeta > 100 ? 'estourou' : ''}`} style={{ width: `${Math.min(pctMeta, 100)}%` }} />
+          </div>
+
+          <div className="macro-linha-titulo">
+            <strong><Beef size={15} style={{ color: 'var(--verde-escuro)' }} /> Proteína</strong>
+            <span>{Math.round(totais.proteinas_g)}/{meta?.proteinas_g ?? '—'}g</span>
+          </div>
+          <div className="barra-meta">
+            <div className={`barra-meta-cheia ${pctProteina > 100 ? 'estourou' : ''}`} style={{ width: `${Math.min(pctProteina, 100)}%` }} />
+          </div>
+
+          <div className="macro-simples">
+            <span className="rotulo"><Wheat size={15} style={{ color: '#3b82f6' }} /> Carboidratos:</span>
+            <strong>{Math.round(totais.carboidratos_g)}g</strong>
+          </div>
+          <div className="macro-simples">
+            <span className="rotulo"><Droplet size={15} style={{ color: '#f59e0b' }} /> Gordura:</span>
+            <strong>{Math.round(totais.gorduras_g)}g</strong>
+          </div>
+        </div>
+
         <label>O que você comeu / tomou?</label>
-        <div className="chips-tipo">
-          {TIPOS_REFEICAO.map((t) => (
-            <button key={t.value} className={`chip ${tipo === t.value ? 'ativa' : ''}`} onClick={() => setTipo(t.value)}>
-              {t.emoji} {t.label}
-            </button>
-          ))}
+        <div className="chips-tipo segmentado">
+          {TIPOS_REFEICAO.map((t) => {
+            const Icone = ICONE_REFEICAO[t.value];
+            return (
+              <button key={t.value} className={`chip ${tipo === t.value ? 'ativa' : ''}`} onClick={() => setTipo(t.value)}>
+                <Icone size={15} /> {t.label}
+              </button>
+            );
+          })}
         </div>
-        <textarea
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
-          placeholder="Ex.: 2 ovos mexidos, 1 fatia de pão integral e café sem açúcar — ou só anexe uma foto do prato 📷"
-        />
 
-        <div className="media-picker">
-          {ditadoDisponivel() && (
-            <button type="button" className={ditando ? 'gravando' : ''} onClick={alternarDitado} title="Ditar">
-              {ditando ? <IconeParar size={17} /> : <IconeMicrofone size={17} />}
-            </button>
-          )}
-          <MediaPicker
-            compacto
-            aoAdicionar={(ref) => {
-              setMidiasPendentes((m) => [...m, ref]);
-              // Regra: chegou foto de comida → o Coach analisa na hora (a descrição continua editável)
-              if (ref.tipo === 'foto') analisarFotoPendente(ref);
-            }}
-          />
-        </div>
-        <MediaGallery
-          midias={midiasPendentes}
-          aoRemover={(ref) => {
-            excluirMidias([ref]);
-            setMidiasPendentes((m) => m.filter((x) => x.id !== ref.id));
-          }}
-        />
-        {analisando && <p className="leitura-balanca">🤖 Olhando seu prato... a descrição chega em instantes.</p>}
-        {temFotoPendente && !analisando && (
-          <button className="destaque" onClick={() => analisarFotoPendente()}>
-            🔍 Analisar a foto de novo
+        {!entradaAberta ? (
+          <button className="primario grande" onClick={() => setEntradaAberta(true)}>
+            <IconeCoach size={17} /> Registrar Refeição (Voz/Foto/Texto)
           </button>
+        ) : (
+          <>
+            <textarea
+              autoFocus
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex.: 2 ovos mexidos, 1 fatia de pão integral e café sem açúcar — ou só anexe uma foto do prato"
+            />
+
+            <div className="media-picker">
+              {ditadoDisponivel() && (
+                <button type="button" className={ditando ? 'gravando' : ''} onClick={alternarDitado} title="Ditar">
+                  {ditando ? <IconeParar size={17} /> : <IconeMicrofone size={17} />}
+                </button>
+              )}
+              <MediaPicker
+                compacto
+                aoAdicionar={(ref) => {
+                  setMidiasPendentes((m) => [...m, ref]);
+                  // Regra: chegou foto de comida → o Coach analisa na hora (a descrição continua editável)
+                  if (ref.tipo === 'foto') analisarFotoPendente(ref);
+                }}
+              />
+            </div>
+            <MediaGallery
+              midias={midiasPendentes}
+              aoRemover={(ref) => {
+                excluirMidias([ref]);
+                setMidiasPendentes((m) => m.filter((x) => x.id !== ref.id));
+              }}
+            />
+            {analisando && <p className="leitura-balanca"><IconeCoach size={14} /> Olhando seu prato... a descrição chega em instantes.</p>}
+            {temFotoPendente && !analisando && (
+              <button className="destaque" onClick={() => analisarFotoPendente()}>
+                <RefreshCw size={15} /> Analisar a foto de novo
+              </button>
+            )}
+
+            <div className="botoes">
+              <button className="primario" onClick={adicionar}><IconeAdicionar size={17} /> Registrar</button>
+              <button onClick={pedirSugestoes} disabled={carregando}>
+                {carregando ? <><IconeCoach size={15} /> Pensando...</> : <><IconeCoach size={15} /> Me sugere algo</>}
+              </button>
+              <button
+                className="secundario"
+                onClick={() => {
+                  setEntradaAberta(false);
+                  setDescricao('');
+                  setMidiasPendentes([]);
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
         )}
-
-        <div className="botoes">
-          <button className="primario" onClick={adicionar}><IconeAdicionar size={17} /> Registrar</button>
-          <button onClick={pedirSugestoes} disabled={carregando}>
-            {carregando ? '🤖 Pensando...' : '🤖 Me sugere algo'}
-          </button>
-        </div>
         {erro && <p className="erro">{erro}</p>}
       </div>
 
       {sugestoes && (
         <div className="cartao">
-          <h2>🍳 Sugestões do Coach</h2>
+          <h2><IconeCoach size={19} /> Sugestões do Coach</h2>
           {sugestoes.map((s, i) => (
             <details key={i} className="sugestao">
               <summary>
@@ -263,16 +319,17 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
         <h2>Registros de hoje</h2>
         {dia.registros.length === 0 && (
           <div className="estado-vazio">
-            <span className="icone-vazio">☕</span>
+            <span className="icone-vazio"><IconeCafeManha size={22} /></span>
             <p>Nada registrado ainda. Bora começar pelo café?</p>
           </div>
         )}
         {TIPOS_REFEICAO.map((t) => {
           const doTipo = dia.registros.filter((r) => r.tipo === t.value);
           if (!doTipo.length) return null;
+          const Icone = ICONE_REFEICAO[t.value];
           return (
             <div key={t.value} className="grupo-refeicao">
-              <h3>{t.emoji} {t.label}</h3>
+              <h3><Icone size={16} /> {t.label}</h3>
               {doTipo.map((r) => (
                 <div key={r.id} className="registro-bloco">
                   <div className="registro">
@@ -294,7 +351,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
 
       {dia.registros.length > 0 && (
         <div className="cartao total-dia">
-          <h2>🔢 Total do dia</h2>
+          <h2><Calculator size={19} /> Total do dia</h2>
           {totais.itensComEstimativa > 0 ? (
             <p className="total-numeros">
               <strong>{Math.round(totais.calorias)} kcal</strong> · P {Math.round(totais.proteinas_g)}g · C{' '}
@@ -318,13 +375,15 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
             </>
           )}
           {!meta && (
-            <p className="meta-texto">💡 Preencha sexo, nascimento, peso e altura no Perfil para eu calcular sua meta diária.</p>
+            <p className="meta-texto"><IconeDica size={14} /> Preencha sexo, nascimento, peso e altura no Perfil para eu calcular sua meta diária.</p>
           )}
           {totais.itensSemEstimativa > 0 && (
             <button className="destaque" onClick={estimarDia} disabled={estimando}>
-              {estimando
-                ? '🤖 Calculando...'
-                : `🤖 Estimar calorias (${totais.itensSemEstimativa} registro${totais.itensSemEstimativa > 1 ? 's' : ''} sem cálculo)`}
+              {estimando ? (
+                <><IconeCoach size={15} /> Calculando...</>
+              ) : (
+                <><IconeCoach size={15} /> Estimar calorias ({totais.itensSemEstimativa} registro{totais.itensSemEstimativa > 1 ? 's' : ''} sem cálculo)</>
+              )}
             </button>
           )}
         </div>

@@ -115,7 +115,7 @@ export default function App() {
     return (
       <div className="app">
         <header className="topo">
-          <h1>💪 Meu Coach</h1>
+          <h1><IconeMusculacao size={22} /> Meu Coach</h1>
           <p className="sub">Seu personal e nutricionista de bolso</p>
         </header>
         <main className="conteudo">
@@ -134,9 +134,9 @@ export default function App() {
   return (
     <div className="app">
       <header className="topo">
-        <h1>💪 Meu Coach</h1>
+        <h1><IconeMusculacao size={22} /> Meu Coach</h1>
         <button className="chip" onClick={trocarConta} title="Trocar de pessoa">
-          👤 {perfil.nome}
+          <IconePerfil size={15} /> {perfil.nome}
         </button>
       </header>
 
@@ -152,6 +152,7 @@ export default function App() {
               dados={dados}
               atualizar={atualizarDados}
               aoMudarPeso={(pesoKg) => atualizarPerfil({ ...perfil, pesoKg })}
+              aoMudarMetaPeso={(pesoMetaKg) => atualizarPerfil({ ...perfil, pesoMetaKg })}
             />
           )}
           {aba === 'coach' && <CoachTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}

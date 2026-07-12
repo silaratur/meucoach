@@ -4,7 +4,8 @@ import { DIAS_SEMANA } from '../types';
 import { avaliarDia } from '../api';
 import { hojeISO, uid } from '../storage';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from '../calc';
-import { IconeExcluir } from './Icones';
+import { IconeExcluir, IconeCoach, IconeAvaliacao, IconeSono } from './Icones';
+import { Flame, Footprints } from 'lucide-react';
 
 function formatarDataLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -27,40 +28,12 @@ interface Props {
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
 }
 
-// Anel de progresso estilo Apple Health — sem bibliotecas, SVG puro.
-function AnelProgresso({ valor, meta, cor, rotulo, exibir }: { valor: number; meta: number; cor: string; rotulo: string; exibir: string }) {
-  const raio = 34;
-  const circunferencia = 2 * Math.PI * raio;
-  const pct = meta > 0 ? Math.max(0, Math.min(1, valor / meta)) : 0;
-  return (
-    <div className="anel-item">
-      <svg viewBox="0 0 80 80" className="anel-svg">
-        <circle cx="40" cy="40" r={raio} fill="none" stroke="var(--borda)" strokeWidth="8" />
-        <circle
-          cx="40"
-          cy="40"
-          r={raio}
-          fill="none"
-          stroke={cor}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={circunferencia}
-          strokeDashoffset={circunferencia * (1 - pct)}
-          transform="rotate(-90 40 40)"
-        />
-        <text x="40" y="45" textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--texto)">
-          {exibir}
-        </text>
-      </svg>
-      <small>{rotulo}</small>
-    </div>
-  );
-}
-
-// Renderização simples do Markdown retornado (negrito, títulos e listas)
+// Renderização simples do Markdown retornado (negrito, títulos e listas) — números com unidade
+// (kcal, g, h, km, passos...) ganham destaque em cor/negrito para saltar aos olhos no texto corrido.
 function Markdown({ texto }: { texto: string }) {
   const html = texto
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/(~?\d[\d.,]*\s?(?:kcal|g|h\d{0,2}|km\/h|km|passos?|min)\b|~?\d[\d.,]*\/dia)/g, '<span class="num-destaque">$1</span>')
     .replace(/^### (.*)$/gm, '<h4>$1</h4>')
     .replace(/^## (.*)$/gm, '<h3>$1</h3>')
     .replace(/^# (.*)$/gm, '<h3>$1</h3>')
@@ -70,6 +43,43 @@ function Markdown({ texto }: { texto: string }) {
     .replace(/\n{2,}/g, '</p><p>')
     .replace(/\n/g, '<br/>');
   return <div className="markdown" dangerouslySetInnerHTML={{ __html: `<p>${html}</p>` }} />;
+}
+
+// Separa a seção final de ações práticas (ex.: "3 ações para amanhã", com ou sem "#") do resto do
+// texto, pra virarem cards com checkbox em vez de ficarem perdidas dentro do texto corrido.
+// Best-effort: aceita lista com "-", "*" ou numerada ("1.", "2)"...); se o formato não bater,
+// devolve o texto inteiro em `antes` sem quebrar nada.
+function extrairAcoes(texto: string): { antes: string; acoes: string[]; depois: string } {
+  const titulo = texto.match(/^.*a[çc][õo]es.*(amanh[ãa]|pr[áa]tica).*$/im);
+  if (!titulo || titulo.index == null) return { antes: texto, acoes: [], depois: '' };
+  const inicioLista = titulo.index + titulo[0].length;
+  const linhas = texto.slice(inicioLista).split('\n');
+  const acoes: string[] = [];
+  let i = 0;
+  for (; i < linhas.length; i++) {
+    const linha = linhas[i].trim();
+    if (!linha) continue;
+    const item = linha.match(/^(?:[-*]|\d+[.)])\s*(.+)$/);
+    if (item) {
+      acoes.push(item[1].trim().replace(/\*\*(.+?)\*\*/g, '$1'));
+      continue;
+    }
+    break;
+  }
+  if (!acoes.length) return { antes: texto, acoes: [], depois: '' };
+  return { antes: texto.slice(0, titulo.index), acoes, depois: linhas.slice(i).join('\n') };
+}
+
+// Card de ação com checkbox — marcado é só de apoio visual nesta sessão (não há campo no backend
+// para status de ação individual ainda), reseta ao trocar de dia selecionado ou recarregar a página.
+function CardAcao({ texto }: { texto: string }) {
+  const [feito, setFeito] = useState(false);
+  return (
+    <label className={`cartao-acao ${feito ? 'feito' : ''}`}>
+      <input type="checkbox" checked={feito} onChange={() => setFeito((v) => !v)} />
+      <span>{texto}</span>
+    </label>
+  );
 }
 
 export default function CoachTab({ perfil, dados, atualizar }: Props) {
@@ -118,7 +128,15 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
   const treinosSemana = dados.sessoes.filter((s) => new Date(s.data).getTime() >= seteDias).length;
   const atividade = resumoAtividade(dados.atividadesDiarias, 7);
   const streak = streakDias(dados.sessoes);
-  const objetivoTreinosSemana = perfil.diasMusculacao?.length || perfil.frequenciaSemana || 3;
+  const atividadeHoje = dados.atividadesDiarias.find((a) => a.data === hoje);
+  const pctCaloriasHoje = meta && totaisHoje.calorias > 0 ? Math.min(100, Math.round((totaisHoje.calorias / meta.kcal) * 100)) : 0;
+  const pilaresHoje = [
+    dia.registros.length > 0,
+    treinosHoje > 0,
+    atividadeHoje?.sonoHoras != null,
+    atividadeHoje?.passos != null,
+    dados.avaliacoes.some((a) => dataLocalDe(a.data) === hoje),
+  ];
 
   async function avaliar() {
     setCarregando(true);
@@ -168,47 +186,39 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
   return (
     <div>
       <div className="cartao">
-        <h2>🤖 Avaliação do Coach</h2>
-        <div className="linha-aneis">
-          <AnelProgresso
-            valor={totaisHoje.calorias}
-            meta={meta?.kcal ?? 2000}
-            cor="#22c55e"
-            rotulo="Calorias"
-            exibir={totaisHoje.itensComEstimativa ? String(Math.round(totaisHoje.calorias)) : '—'}
-          />
-          <AnelProgresso
-            valor={treinosSemana}
-            meta={objetivoTreinosSemana}
-            cor="#2563eb"
-            rotulo="Treinos/semana"
-            exibir={`${treinosSemana}/${objetivoTreinosSemana}`}
-          />
-          <AnelProgresso
-            valor={atividade.sonoMedia ?? 0}
-            meta={8}
-            cor="#7c3aed"
-            rotulo="Sono médio"
-            exibir={atividade.sonoMedia != null ? `${atividade.sonoMedia}h` : '—'}
-          />
+        <h2><IconeCoach size={19} /> Avaliação do Coach</h2>
+        <div className="resumo-duas-colunas">
+          <div className="coluna-resumo">
+            <h3 className="rotulo-coluna">Macros de Hoje</h3>
+            <div className="mini-barra-linha">
+              <div className="barra-meta mini"><div className="barra-meta-cheia" style={{ width: `${pctCaloriasHoje}%` }} /></div>
+              <span>{totaisHoje.itensComEstimativa ? Math.round(totaisHoje.calorias) : 0} kcal</span>
+            </div>
+            <div className="mini-barra-linha">
+              <div className="barra-meta mini"><div className="barra-meta-cheia" style={{ width: '100%', background: '#f59e0b' }} /></div>
+              <span>{meta ? meta.kcal : '—'} kcal</span>
+            </div>
+          </div>
+          <div className="coluna-resumo">
+            <h3 className="rotulo-coluna">Pontos de Atenção</h3>
+            {atividade.sonoMedia != null && (
+              <p className="ponto-atencao"><IconeSono size={14} /> Sono: <strong>{atividade.sonoMedia}h</strong></p>
+            )}
+            {atividade.passosMedia != null && (
+              <p className="ponto-atencao"><Footprints size={14} /> Passos: <strong>{Math.round(atividade.passosMedia / 1000)}k</strong></p>
+            )}
+            {atividade.sonoMedia == null && atividade.passosMedia == null && (
+              <p className="meta-texto">Sem dados de sono/passos ainda.</p>
+            )}
+          </div>
         </div>
         {streak > 0 && (
           <p className="streak-texto">
-            🔥 Sequência de <strong>{streak}</strong> {streak === 1 ? 'dia ativo' : 'dias ativos'}!
+            <Flame size={15} /> Sequência de <strong>{streak}</strong> {streak === 1 ? 'dia ativo' : 'dias ativos'}! · Treinos esta semana: <strong>{treinosSemana}</strong>
           </p>
         )}
-        <div className="grade-metricas">
-          <div><small>Refeições hoje</small><strong>{dia.registros.length}</strong></div>
-          <div><small>Calorias hoje</small><strong>{totaisHoje.itensComEstimativa ? `~${Math.round(totaisHoje.calorias)}` : '—'}</strong></div>
-          <div><small>Meta kcal</small><strong>{meta ? `~${meta.kcal}` : '—'}</strong></div>
-          <div><small>Proteína hoje</small><strong>{totaisHoje.itensComEstimativa ? `${Math.round(totaisHoje.proteinas_g)}g` : '—'}</strong></div>
-          <div><small>Treinos hoje</small><strong>{treinosHoje}</strong></div>
-          <div><small>Treinos 7 dias</small><strong>{treinosSemana}</strong></div>
-          {atividade.passosMedia != null && <div><small>Passos/dia (média)</small><strong>{atividade.passosMedia.toLocaleString('pt-BR')}</strong></div>}
-          {atividade.sonoMedia != null && <div><small>Sono/noite (média)</small><strong>{atividade.sonoMedia}h</strong></div>}
-        </div>
         <button className="primario grande" onClick={avaliar} disabled={carregando}>
-          {carregando ? '🤖 Analisando seu dia...' : '📋 Avaliar meu dia (alimentação + treino)'}
+          {carregando ? <><IconeCoach size={16} /> Analisando seu dia...</> : <><IconeAvaliacao size={16} /> Avaliar meu dia (alimentação + treino)</>}
         </button>
         {erro && <p className="erro">{erro}</p>}
       </div>
@@ -218,7 +228,7 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
           <button className="mini secundario" onClick={() => irParaSemana(semanaOffset - 1)} title="Semana anterior">
             ‹
           </button>
-          <h2>📋 Relatório do dia</h2>
+          <h2><IconeAvaliacao size={19} /> Relatório do dia</h2>
           <button
             className="mini secundario"
             onClick={() => irParaSemana(semanaOffset + 1)}
@@ -245,11 +255,29 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
         <div className="detalhe-dia-semana">
           {avaliacaoSelecionada ? (
             <>
-              <p className="meta-texto">
-                {new Date(avaliacaoSelecionada.data).toLocaleDateString('pt-BR')}{' '}
-                <small>às {new Date(avaliacaoSelecionada.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
-              </p>
-              <Markdown texto={avaliacaoSelecionada.texto} />
+              <div className="cabecalho-avaliacao">
+                <p className="meta-texto">
+                  {new Date(avaliacaoSelecionada.data).toLocaleDateString('pt-BR')}{' '}
+                  <small>às {new Date(avaliacaoSelecionada.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</small>
+                </p>
+                {diaSelecionado === hoje && (
+                  <div className="stepper-completude" title="Refeições · Treino · Sono · Passos · Avaliação">
+                    {pilaresHoje.map((ok, i) => (
+                      <span key={i} className={`stepper-ponto ${ok ? 'feito' : ''}`} />
+                    ))}
+                  </div>
+                )}
+              </div>
+              {(() => {
+                const { antes, acoes, depois } = extrairAcoes(avaliacaoSelecionada.texto);
+                return (
+                  <>
+                    <Markdown texto={antes} />
+                    {acoes.map((a, i) => <CardAcao key={i} texto={a} />)}
+                    {depois && <Markdown texto={depois} />}
+                  </>
+                );
+              })()}
               <button
                 className="mini"
                 onClick={() => atualizar((d) => ({ ...d, avaliacoes: d.avaliacoes.filter((x) => x.id !== avaliacaoSelecionada.id) }))}

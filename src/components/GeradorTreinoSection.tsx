@@ -4,7 +4,8 @@ import { LOCAIS } from '../types';
 import { uid, hojeISO } from '../storage';
 import { dataLocalDe } from '../calc';
 import { gerarPlano, gerarTreino } from '../api';
-import { IconeComecar, IconeEditar, IconeExcluir } from './Icones';
+import { IconeComecar, IconeEditar, IconeExcluir, IconeCoach, IconeAquecimento, IconeCorrida, IconeAlongamento, IconeDica, ICONE_LOCAL } from './Icones';
+import { Zap, CalendarDays, TrendingUp, PartyPopper } from 'lucide-react';
 
 // Relatório do dia mais recente (ontem ou hoje) — se indicar déficit/excesso de calorias ou
 // atividade, entra como contexto pra recomendação de hoje favorecer recuperação gradual.
@@ -211,14 +212,17 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
   return (
     <>
       <div className="cartao">
-        <h2>🤖 Gerar treino com o Coach</h2>
+        <h2><IconeCoach size={19} /> Gerar treino com o Coach</h2>
         <label>Onde vai treinar?</label>
         <div className="chips-tipo">
-          {LOCAIS.map((l) => (
-            <button key={l.value} className={`chip ${local === l.value ? 'ativa' : ''}`} onClick={() => setLocal(l.value)}>
-              {l.emoji} {l.label}
-            </button>
-          ))}
+          {LOCAIS.map((l) => {
+            const Icone = ICONE_LOCAL[l.value];
+            return (
+              <button key={l.value} className={`chip ${local === l.value ? 'ativa' : ''}`} onClick={() => setLocal(l.value)}>
+                <Icone size={15} /> {l.label}
+              </button>
+            );
+          })}
         </div>
 
         <label>Duração do plano</label>
@@ -239,7 +243,7 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
           <div>
             <label>Foco</label>
             <select value={foco} onChange={(e) => setFoco(e.target.value)}>
-              <option value="coach">🤖 Coach decide (recomendado)</option>
+              <option value="coach">Coach decide (recomendado)</option>
               <option value="corpo inteiro">Corpo inteiro</option>
               <option value="superiores (peito, costas, ombros e braços)">Superiores</option>
               <option value="inferiores (pernas e glúteos)">Inferiores</option>
@@ -262,38 +266,36 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
             onClick={gerar}
             disabled={gerando || (duracaoPlano !== '1dia' && !perfil.diasMusculacao?.length)}
           >
-            {gerando
-              ? duracaoPlano === '1dia'
-                ? '🤖 Montando seu treino...'
-                : '🤖 Montando seu plano... (pode levar até um minuto)'
-              : duracaoPlano === '1dia'
-                ? '⚡ Gerar treino'
-                : `⚡ Gerar plano de ${opcaoAtual.label}`}
+            {gerando ? (
+              <><IconeCoach size={17} /> {duracaoPlano === '1dia' ? 'Montando seu treino...' : 'Montando seu plano... (pode levar até um minuto)'}</>
+            ) : (
+              <><Zap size={17} /> {duracaoPlano === '1dia' ? 'Gerar treino' : `Gerar plano de ${opcaoAtual.label}`}</>
+            )}
           </button>
           {duracaoPlano === '1dia' && <button onClick={aoMontarManualmente}><IconeEditar size={15} /> Montar manualmente</button>}
         </div>
         {duracaoPlano !== '1dia' && !perfil.diasMusculacao?.length && (
-          <p className="meta-texto">💡 Defina seus dias de musculação na "Avaliação do aluno" acima antes de gerar.</p>
+          <p className="meta-texto"><IconeDica size={14} /> Defina seus dias de musculação na "Avaliação do aluno" acima antes de gerar.</p>
         )}
         {erro && <p className="erro">{erro}</p>}
       </div>
 
       {plano && (
         <div className="cartao">
-          <h2>📅 {plano.nome}</h2>
+          <h2><CalendarDays size={19} /> {plano.nome}</h2>
           <p className="meta-texto">
             {plano.semanas === 1 ? '1 semana' : `${plano.semanas} semanas`} · {plano.dias.length} treinos
           </p>
           <p className="meta-texto">{plano.avaliacaoInicial}</p>
           <details className="sugestao">
-            <summary><strong>📈 Estratégia do plano</strong></summary>
+            <summary><strong><TrendingUp size={15} /> Estratégia do plano</strong></summary>
             <p>{plano.estrategiaMes}</p>
           </details>
           <p className="resumo-evolucao">
             <strong>{feitos}/{plano.dias.length}</strong> treinos concluídos
           </p>
           {plano.dias.length > 0 && feitos === plano.dias.length && (
-            <p className="resumo-evolucao celebracao">🎉 Plano concluído! Hora de gerar o próximo ciclo.</p>
+            <p className="resumo-evolucao celebracao"><PartyPopper size={16} /> Plano concluído! Hora de gerar o próximo ciclo.</p>
           )}
           <div className="barra-meta">
             <div className="barra-meta-cheia" style={{ width: `${plano.dias.length ? Math.round((feitos / plano.dias.length) * 100) : 0}%` }} />
@@ -330,22 +332,22 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
                     </small>
                   </span>
                 </label>
-                <p className="detalhes-dia">🔥 {d.aquecimento}</p>
+                <p className="detalhes-dia"><IconeAquecimento size={14} /> {d.aquecimento}</p>
                 {d.exercicios.map((e) => (
                   <p key={e.id} className="detalhes-dia">
                     &nbsp;&nbsp;• <strong>{e.nome}</strong> — {e.series}x{e.repeticoes}
                     {e.cargaSugerida ? ` · ${e.cargaSugerida}` : ''} · descanso {e.descansoSeg}s
                   </p>
                 ))}
-                {d.cardioRecomendado && <p className="detalhes-dia">🏃 Cardio: {d.cardioRecomendado}</p>}
-                {d.alongamento && <p className="detalhes-dia">🧘 Alongamento: {d.alongamento}</p>}
+                {d.cardioRecomendado && <p className="detalhes-dia"><IconeCorrida size={14} /> Cardio: {d.cardioRecomendado}</p>}
+                {d.alongamento && <p className="detalhes-dia"><IconeAlongamento size={14} /> Alongamento: {d.alongamento}</p>}
                 <button className="mini" onClick={() => comecarDia(d.id)}><IconeComecar size={13} /> Começar este treino</button>
               </div>
             ))}
 
           {plano.recomendacoesGerais && (
             <details className="sugestao">
-              <summary><strong>💡 Recomendações gerais</strong></summary>
+              <summary><strong><IconeDica size={15} /> Recomendações gerais</strong></summary>
               <p>{plano.recomendacoesGerais}</p>
             </details>
           )}

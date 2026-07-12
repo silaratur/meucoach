@@ -6,13 +6,15 @@ import { analisarAtividadeFoto, analisarBalanca, avaliarSono } from '../api';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
-import { IconeAdicionar } from './Icones';
+import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
+import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
   aoMudarPeso: (pesoKg: number) => void;
+  aoMudarMetaPeso: (pesoMetaKg: number) => void;
 }
 
 interface Ponto {
@@ -164,12 +166,48 @@ function GraficoBarras({ pontos, cor = '#22c55e' }: { pontos: Ponto[]; cor?: str
   );
 }
 
+// ---------- Comparativo atual vs. anterior (bioimpedância) ----------
+function ComparativoBarras({
+  rotulo,
+  atual,
+  anterior,
+  unidade,
+  cor,
+}: {
+  rotulo: string;
+  atual: number;
+  anterior: number | undefined;
+  unidade: string;
+  cor: string;
+}) {
+  const max = Math.max(atual, anterior ?? 0, 1);
+  return (
+    <div className="comparativo-metrica">
+      <small>{rotulo}</small>
+      <strong>{atual.toFixed(1)}{unidade}</strong>
+      <div className="comparativo-barras">
+        <div className="comparativo-col">
+          <span className="comparativo-valor">{atual.toFixed(1)}{unidade}</span>
+          <div className="comparativo-barra" style={{ height: `${(atual / max) * 100}%`, background: cor }} />
+          <small>Atual</small>
+        </div>
+        <div className="comparativo-col">
+          <span className="comparativo-valor">{anterior != null ? `${anterior.toFixed(1)}${unidade}` : '—'}</span>
+          <div className="comparativo-barra anterior" style={{ height: `${((anterior ?? 0) / max) * 100}%` }} />
+          <small>Anterior</small>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function rotuloCurto(dataISO: string): string {
   return `${dataISO.slice(8, 10)}/${dataISO.slice(5, 7)}`;
 }
 
-export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: Props) {
+export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoMudarMetaPeso }: Props) {
   const [pesoNovo, setPesoNovo] = useState('');
+  const [metaInput, setMetaInput] = useState('');
   const [analisando, setAnalisando] = useState(false);
   const [leitura, setLeitura] = useState('');
   const [erro, setErro] = useState('');
@@ -186,7 +224,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       const r = await analisarBalanca(perfil, base64, blob.type || 'image/jpeg');
       if (!r.ehBalanca || !r.pesoKg || r.pesoKg <= 0) {
         excluirMidias([ref]);
-        setErro('🤖 ' + (r.observacao || 'Não consegui ler os números dessa foto. Tente com o visor mais nítido.'));
+        setErro(r.observacao || 'Não consegui ler os números dessa foto. Tente com o visor mais nítido.');
         return;
       }
       const data = hojeISO();
@@ -208,7 +246,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
         return { ...d, pesagens: [...d.pesagens.filter((p) => p.data !== data), nova] };
       });
       aoMudarPeso(r.pesoKg);
-      setLeitura('🤖 ' + r.observacao);
+      setLeitura(r.observacao);
     } catch (e) {
       excluirMidias([ref]);
       setErro((e as Error).message);
@@ -240,7 +278,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       const r = await avaliarSono(perfil, base64, mediaType);
       excluirMidias([ref]);
       if (!r.ehSono || !r.sonoHoras || r.sonoHoras <= 0) {
-        setErroSono('🤖 ' + (r.comentario || 'Não consegui ler os dados de sono nessa mídia.'));
+        setErroSono(r.comentario || 'Não consegui ler os dados de sono nessa mídia.');
         return;
       }
       const data = r.data || dataRef;
@@ -250,7 +288,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
         porData.set(data, { ...atual, sonoHoras: r.sonoHoras, sonoQualidade: r.sonoQualidade, frequenciaCardiacaMedia: r.frequenciaCardiacaMedia || atual.frequenciaCardiacaMedia, fonte: 'foto' });
         return { ...d, atividadesDiarias: [...porData.values()].sort((a, b) => a.data.localeCompare(b.data)) };
       });
-      setResumoSono('🤖 ' + r.comentario);
+      setResumoSono(r.comentario);
     } catch (err) {
       setErroSono((err as Error).message);
     } finally {
@@ -271,7 +309,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       const r = await analisarAtividadeFoto(perfil, base64, mediaType);
       excluirMidias([ref]);
       if (!r.ehIndicadorAtividade) {
-        setErroAtividade('🤖 ' + r.comentario);
+        setErroAtividade(r.comentario);
         return;
       }
       const data = r.data || hojeISO();
@@ -281,7 +319,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
         porData.set(data, { ...atual, passos: r.passos || atual.passos, calorias: r.calorias || atual.calorias, minutosAtivos: r.minutosAtivos || atual.minutosAtivos, fonte: 'foto' });
         return { ...d, atividadesDiarias: [...porData.values()].sort((a, b) => a.data.localeCompare(b.data)) };
       });
-      setResumoAtividadeFoto('🤖 ' + r.comentario);
+      setResumoAtividadeFoto(r.comentario);
     } catch (err) {
       setErroAtividade((err as Error).message);
     } finally {
@@ -317,6 +355,16 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
     }));
     aoMudarPeso(v);
     setPesoNovo('');
+  }
+
+  function salvarMeta() {
+    const v = parseFloat(metaInput.replace(',', '.'));
+    if (!v || v < 20 || v > 400) {
+      alert('Digite uma meta de peso válida em kg.');
+      return;
+    }
+    aoMudarMetaPeso(v);
+    setMetaInput('');
   }
 
   // ----- recordes pessoais -----
@@ -373,22 +421,76 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
   const pontosMassaMagra: Ponto[] = pesagens
     .filter((p) => typeof p.massaMagraKg === 'number')
     .map((p) => ({ rotulo: rotuloCurto(p.data), valor: p.massaMagraKg! }));
-  const ultimaComDetalhe = [...pesagens].reverse().find((p) => p.imc || p.gorduraPct || p.massaMagraKg || p.aguaPct);
+  const pesagensComDetalhe = pesagens.filter((p) => p.imc || p.gorduraPct || p.massaMagraKg || p.aguaPct);
+  const ultimaComDetalhe = pesagensComDetalhe[pesagensComDetalhe.length - 1];
+  const anteriorComDetalhe = pesagensComDetalhe[pesagensComDetalhe.length - 2];
+
+  // ----- medidor de progresso de peso (ponto de partida → meta) -----
+  const pesoInicial = primeiroPeso?.pesoKg;
+  const pesoMeta = perfil.pesoMetaKg;
+  const pesoAtualNum = ultimoPeso?.pesoKg;
+  let progressoMeta = 0;
+  if (pesoInicial != null && pesoMeta != null && pesoAtualNum != null && pesoInicial !== pesoMeta) {
+    const perdendo = pesoMeta < pesoInicial;
+    const bruto = perdendo
+      ? ((pesoInicial - pesoAtualNum) / (pesoInicial - pesoMeta)) * 100
+      : ((pesoAtualNum - pesoInicial) / (pesoMeta - pesoInicial)) * 100;
+    progressoMeta = Math.min(100, Math.max(0, bruto));
+  }
+  const faltamKg = pesoMeta != null && pesoAtualNum != null ? Math.abs(pesoMeta - pesoAtualNum) : null;
 
   return (
     <div>
       <div className="cartao">
-        <h2>⚖️ Peso e bioimpedância</h2>
-        <p className="meta-texto">
-          📷 Tire uma foto do <strong>visor da balança</strong> (ou do app dela) que eu leio tudo: peso, gordura,
-          massa magra, água, IMC...
-        </p>
+        <h2><IconeMusculacao size={19} /> Peso &amp; Progresso</h2>
+
+        {pesagens.length > 0 && <p className="peso-grande">{ultimoPeso.pesoKg} kg</p>}
+
+        {pesoMeta != null && pesoInicial != null ? (
+          <>
+            <div className="medidor-peso">
+              <div className="medidor-peso-trilha">
+                <div className="medidor-peso-marcador" style={{ left: `${progressoMeta}%` }} />
+              </div>
+              <div className="medidor-peso-extremos">
+                <span>{pesoInicial} kg</span>
+                <span>{pesoMeta} kg</span>
+              </div>
+            </div>
+            {pesagens.length > 1 && (
+              <p className={`resumo-evolucao celebracao-peso ${variacao <= 0 ? 'bom' : 'atencao'}`}>
+                Parabéns, {perfil.nome}! {variacao > 0 ? '+' : ''}{variacao.toFixed(1)} kg desde {rotuloCurto(primeiroPeso.data)}
+              </p>
+            )}
+            <div className="tiles-peso">
+              <div><small>Atual</small><strong>{pesoAtualNum} kg</strong></div>
+              <div><small>Meta</small><strong>{pesoMeta} kg</strong></div>
+              <div><small>Faltam</small><strong>{faltamKg?.toFixed(1)} kg</strong></div>
+            </div>
+          </>
+        ) : (
+          <div className="linha-add">
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              value={metaInput}
+              onChange={(e) => setMetaInput(e.target.value)}
+              placeholder="Definir meta de peso (kg)"
+            />
+            <button className="primario" onClick={salvarMeta}><IconeAdicionar size={17} /></button>
+          </div>
+        )}
+
+        <GraficoLinha pontos={pontosPeso} unidade="kg" />
+
+        <label><IconeCamera size={14} /> Tire uma foto do visor da balança (leio peso, gordura, massa magra, água, IMC...)</label>
         <MediaPicker tipos={['foto']} aoAdicionar={fotoBalanca} />
-        {analisando && <p className="vazio">🤖 Lendo os números da balança...</p>}
+        {analisando && <p className="vazio"><IconeCoach size={14} /> Lendo os números da balança...</p>}
         {leitura && <p className="leitura-balanca">{leitura}</p>}
         {erro && <p className="erro">{erro}</p>}
 
-        <label>Ou registre só o peso manualmente</label>
+        <label>Registrar Peso</label>
         <div className="linha-add">
           <input
             type="number"
@@ -396,30 +498,37 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
             step="0.1"
             value={pesoNovo}
             onChange={(e) => setPesoNovo(e.target.value)}
-            placeholder={`Peso de hoje (kg)${perfil.pesoKg ? ` — último: ${perfil.pesoKg}` : ''}`}
+            placeholder={`Registro rápido (kg)${perfil.pesoKg ? ` — último: ${perfil.pesoKg}` : ''}`}
           />
           <button className="primario" onClick={registrarPeso}><IconeAdicionar size={17} /></button>
         </div>
-        {pesagens.length > 0 && (
-          <p className="resumo-evolucao">
-            Atual: <strong>{ultimoPeso.pesoKg} kg</strong>
-            {pesagens.length > 1 && (
-              <> · desde {rotuloCurto(primeiroPeso.data)}: <strong className={variacao <= 0 ? 'bom' : 'atencao'}>
-                {variacao > 0 ? '+' : ''}{variacao.toFixed(1)} kg
-              </strong></>
-            )}
-          </p>
-        )}
-        <GraficoLinha pontos={pontosPeso} unidade="kg" />
       </div>
 
       {ultimaComDetalhe && (
         <div className="cartao">
-          <h2>🧬 Última bioimpedância ({rotuloCurto(ultimaComDetalhe.data)})</h2>
+          <h2><Dna size={19} /> Bioimpedância ({rotuloCurto(ultimaComDetalhe.data)})</h2>
+          <div className="comparativos-bioimpedancia">
+            {ultimaComDetalhe.gorduraPct != null && (
+              <ComparativoBarras
+                rotulo="Gordura"
+                atual={ultimaComDetalhe.gorduraPct}
+                anterior={anteriorComDetalhe?.gorduraPct}
+                unidade="%"
+                cor="#f59e0b"
+              />
+            )}
+            {ultimaComDetalhe.massaMagraKg != null && (
+              <ComparativoBarras
+                rotulo="Massa Magra"
+                atual={ultimaComDetalhe.massaMagraKg}
+                anterior={anteriorComDetalhe?.massaMagraKg}
+                unidade="kg"
+                cor="var(--verde)"
+              />
+            )}
+          </div>
           <div className="grade-metricas">
             {ultimaComDetalhe.imc != null && <div><small>IMC</small><strong>{ultimaComDetalhe.imc.toFixed(1)}</strong></div>}
-            {ultimaComDetalhe.gorduraPct != null && <div><small>Gordura</small><strong>{ultimaComDetalhe.gorduraPct.toFixed(1)}%</strong></div>}
-            {ultimaComDetalhe.massaMagraKg != null && <div><small>Massa magra</small><strong>{ultimaComDetalhe.massaMagraKg.toFixed(1)} kg</strong></div>}
             {ultimaComDetalhe.musculoKg != null && <div><small>Músculo</small><strong>{ultimaComDetalhe.musculoKg.toFixed(1)} kg</strong></div>}
             {ultimaComDetalhe.aguaPct != null && <div><small>Água</small><strong>{ultimaComDetalhe.aguaPct.toFixed(1)}%</strong></div>}
             {ultimaComDetalhe.gorduraVisceral != null && <div><small>G. visceral</small><strong>{ultimaComDetalhe.gorduraVisceral}</strong></div>}
@@ -430,32 +539,32 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       )}
 
       <div className="cartao">
-        <h2>📲 Atividade e sono</h2>
+        <h2><Smartphone size={19} /> Atividade e sono</h2>
         <p className="meta-texto">
           Envie uma foto ou vídeo do seu sono e da sua atividade (Samsung Health ou similar) — o Coach analisa e
           essa informação entra direto na recomendação de treino e alimentação dos próximos dias.
         </p>
-        <label>😴 Sono (foto ou vídeo do wearable)</label>
+        <label><IconeSono size={15} /> Sono (foto ou vídeo do wearable)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoSonoRetroativa} />
-        {analisandoSono && <p className="vazio">🤖 Analisando o sono...</p>}
+        {analisandoSono && <p className="vazio"><IconeCoach size={14} /> Analisando o sono...</p>}
         {resumoSono && <p className="leitura-balanca">{resumoSono}</p>}
         {erroSono && <p className="erro">{erroSono}</p>}
 
-        <label>🏃 Atividade (foto ou vídeo — passos, tempo ativo, calorias)</label>
+        <label><IconeCorrida size={15} /> Atividade (foto ou vídeo — passos, tempo ativo, calorias)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoAtividade} />
-        {analisandoAtividade && <p className="vazio">🤖 Analisando a atividade...</p>}
+        {analisandoAtividade && <p className="vazio"><IconeCoach size={14} /> Analisando a atividade...</p>}
         {resumoAtividadeFoto && <p className="leitura-balanca">{resumoAtividadeFoto}</p>}
         {erroAtividade && <p className="erro">{erroAtividade}</p>}
 
         {pontosPassos.length > 0 && (
           <>
-            <h3>👣 Passos por dia</h3>
+            <h3><Footprints size={17} /> Passos por dia</h3>
             <GraficoBarras pontos={pontosPassos} cor="#2563eb" />
           </>
         )}
         {pontosSono.length >= 2 && (
           <>
-            <h3>😴 Horas de sono</h3>
+            <h3><IconeSono size={17} /> Horas de sono</h3>
             <GraficoLinha pontos={pontosSono} unidade="h" cor="#7c3aed" />
           </>
         )}
@@ -463,21 +572,21 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
 
       {pontosGordura.length >= 2 && (
         <div className="cartao">
-          <h2>📉 Gordura corporal (%)</h2>
+          <h2><TrendingDown size={19} /> Gordura corporal (%)</h2>
           <GraficoLinha pontos={pontosGordura} unidade="%" cor="#d97706" />
         </div>
       )}
 
       {pontosMassaMagra.length >= 2 && (
         <div className="cartao">
-          <h2>💪 Massa magra (kg)</h2>
+          <h2><IconeMusculacao size={19} /> Massa magra (kg)</h2>
           <GraficoLinha pontos={pontosMassaMagra} unidade="kg" cor="#2563eb" />
         </div>
       )}
 
       {recordes.length > 0 && (
         <div className="cartao">
-          <h2>🏆 Recordes pessoais</h2>
+          <h2><Trophy size={19} /> Recordes pessoais</h2>
           <div className="lista-recordes">
             {recordes.slice(0, 12).map((r) => (
               <div key={r.nome} className="item-recorde">
@@ -491,7 +600,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       )}
 
       <div className="cartao">
-        <h2>🏋️ Progressão de carga</h2>
+        <h2><IconeMusculacao size={19} /> Progressão de carga</h2>
         {exerciciosComCarga.length === 0 ? (
           <p className="vazio">Registre as cargas durante os treinos (no player) para acompanhar sua progressão aqui.</p>
         ) : (
@@ -505,7 +614,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
               <GraficoLinha pontos={pontosCarga} unidade="kg" cor="#2563eb" />
             ) : (
               <p className="vazio">
-                Só {pontosCarga.length} registro até agora ({pontosCarga[0]?.valor} kg) — treine de novo para ver a linha subir! 📈
+                Só {pontosCarga.length} registro até agora ({pontosCarga[0]?.valor} kg) — treine de novo para ver a linha subir!
               </p>
             )}
           </>
@@ -513,7 +622,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso }: P
       </div>
 
       <div className="cartao">
-        <h2>📅 Treinos por semana</h2>
+        <h2><CalendarDays size={19} /> Treinos por semana</h2>
         <p className="resumo-evolucao">
           Últimas 8 semanas · total: <strong>{frequencia.reduce((a, p) => a + p.valor, 0)} treinos</strong>
         </p>

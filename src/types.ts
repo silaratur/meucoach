@@ -48,11 +48,11 @@ export const NIVEIS_EXPERIENCIA: { value: NivelExperiencia; label: string }[] = 
 export type HorarioTreino = 'manha' | 'almoco' | 'tarde' | 'noite' | 'varia';
 
 export const HORARIOS_TREINO: { value: HorarioTreino; label: string }[] = [
-  { value: 'manha', label: '🌅 Manhã (antes do trabalho)' },
-  { value: 'almoco', label: '🕛 Hora do almoço' },
-  { value: 'tarde', label: '🌤️ Tarde' },
-  { value: 'noite', label: '🌙 Noite' },
-  { value: 'varia', label: '🔀 Varia' },
+  { value: 'manha', label: 'Manhã (antes do trabalho)' },
+  { value: 'almoco', label: 'Hora do almoço' },
+  { value: 'tarde', label: 'Tarde' },
+  { value: 'noite', label: 'Noite' },
+  { value: 'varia', label: 'Varia' },
 ];
 
 export const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
@@ -64,6 +64,7 @@ export interface Perfil {
   nascimento?: string; // "yyyy-MM-dd"
   idade?: number; // calculada a partir do nascimento (mantida para a IA)
   pesoKg?: number;
+  pesoMetaKg?: number; // meta de peso, usada no medidor de progresso da Evolução
   alturaCm?: number;
   objetivo: Objetivo;
   restricoes?: string;
@@ -95,14 +96,14 @@ export type TipoRefeicao =
   | 'ceia'
   | 'suplemento';
 
-export const TIPOS_REFEICAO: { value: TipoRefeicao; label: string; emoji: string }[] = [
-  { value: 'cafe', label: 'Café da manhã', emoji: '☕' },
-  { value: 'lanche_manha', label: 'Lanche da manhã', emoji: '🍎' },
-  { value: 'almoco', label: 'Almoço', emoji: '🍽️' },
-  { value: 'lanche_tarde', label: 'Lanche da tarde', emoji: '🥪' },
-  { value: 'jantar', label: 'Jantar', emoji: '🍲' },
-  { value: 'ceia', label: 'Ceia', emoji: '🌙' },
-  { value: 'suplemento', label: 'Suplemento', emoji: '💊' },
+export const TIPOS_REFEICAO: { value: TipoRefeicao; label: string }[] = [
+  { value: 'cafe', label: 'Café da manhã' },
+  { value: 'lanche_manha', label: 'Lanche da manhã' },
+  { value: 'almoco', label: 'Almoço' },
+  { value: 'lanche_tarde', label: 'Lanche da tarde' },
+  { value: 'jantar', label: 'Jantar' },
+  { value: 'ceia', label: 'Ceia' },
+  { value: 'suplemento', label: 'Suplemento' },
 ];
 
 import type { MediaRef } from './media';
@@ -141,10 +142,10 @@ export interface Exercicio {
 
 export type LocalTreino = 'academia' | 'casa' | 'rua';
 
-export const LOCAIS: { value: LocalTreino; label: string; emoji: string }[] = [
-  { value: 'academia', label: 'Academia', emoji: '🏋️' },
-  { value: 'casa', label: 'Em casa', emoji: '🏠' },
-  { value: 'rua', label: 'Na rua', emoji: '🏃' },
+export const LOCAIS: { value: LocalTreino; label: string }[] = [
+  { value: 'academia', label: 'Academia' },
+  { value: 'casa', label: 'Em casa' },
+  { value: 'rua', label: 'Na rua' },
 ];
 
 export interface Treino {

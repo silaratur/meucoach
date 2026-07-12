@@ -4,12 +4,26 @@ import { DIAS_SEMANA, HORARIOS_TREINO, LOCAIS, NIVEIS_EXPERIENCIA } from '../typ
 import CorridaSection from './CorridaSection';
 import { uid } from '../storage';
 import { excluirMidias } from '../media';
-import { linkVideoExercicio } from '../calc';
+import { linkVideoExercicio, grupoCorporal } from '../calc';
 import { MediaGallery, MediaPicker } from './Midia';
 import WorkoutPlayer from './WorkoutPlayer';
 import VisaoSemana from './VisaoSemana';
 import GeradorTreinoSection from './GeradorTreinoSection';
-import { IconeAdicionar, IconeComecar, IconeEditar, IconeExcluir, IconeSalvar, IconeVideo } from './Icones';
+import {
+  IconeAdicionar,
+  IconeComecar,
+  IconeEditar,
+  IconeExcluir,
+  IconeSalvar,
+  IconeVideo,
+  IconeMusculacao,
+  IconeCorrida,
+  IconeAvaliacao,
+  IconeAquecimento,
+  IconeDica,
+  ICONE_LOCAL,
+} from './Icones';
+import { AlertTriangle, Repeat, Zap, MessageCircle, Link2 } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -41,12 +55,12 @@ function AnamneseCard({ perfil, aoSalvar }: { perfil: Perfil; aoSalvar: (p: Perf
     return (
       <div className="cartao anamnese-ok">
         <p>
-          📋 <strong>Avaliação:</strong> {NIVEIS_EXPERIENCIA.find((n) => n.value === perfil.nivelExperiencia)?.label},{' '}
+          <IconeAvaliacao size={15} /> <strong>Avaliação:</strong> {NIVEIS_EXPERIENCIA.find((n) => n.value === perfil.nivelExperiencia)?.label},{' '}
           {perfil.diasMusculacao?.length
             ? perfil.diasMusculacao.map((d) => d.slice(0, 3)).join('/')
             : `${perfil.frequenciaSemana ?? '?'}x/semana`}
-          , treina {HORARIOS_TREINO.find((h) => h.value === perfil.horarioTreino)?.label.replace(/^.\s/, '').toLowerCase()}
-          {perfil.restricoesSaude ? ` · ⚠️ ${perfil.restricoesSaude}` : ' · sem restrições de saúde'}
+          , treina {HORARIOS_TREINO.find((h) => h.value === perfil.horarioTreino)?.label.toLowerCase()}
+          {perfil.restricoesSaude ? <> · <AlertTriangle size={13} /> {perfil.restricoesSaude}</> : ' · sem restrições de saúde'}
           {'  '}
           <button className="mini" onClick={() => setAberto(true)}><IconeEditar size={13} /> Editar</button>
         </p>
@@ -56,7 +70,7 @@ function AnamneseCard({ perfil, aoSalvar }: { perfil: Perfil; aoSalvar: (p: Perf
 
   return (
     <div className="cartao">
-      <h2>📋 Avaliação do aluno</h2>
+      <h2><IconeAvaliacao size={19} /> Avaliação do aluno</h2>
       <p className="meta-texto">
         Antes de montar seu treino, preciso te conhecer — como todo bom avaliador físico. Isso também ajusta suas
         refeições e suplementos.
@@ -159,6 +173,44 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
   const [atividadeLivre, setAtividadeLivre] = useState('');
   const [editando, setEditando] = useState<Treino | null>(null);
 
+  // Treino sugerido para hoje: próximo dia não concluído do plano de musculação ativo.
+  const planoAtivo = dados.planosMusculacao[0];
+  const proximoDia = planoAtivo?.dias.find((d) => !planoAtivo.concluidos.includes(d.id));
+
+  function iniciarTreinoSugerido() {
+    if (!planoAtivo || !proximoDia) return;
+    setTreinoAtivo({
+      id: proximoDia.id,
+      nome: `${proximoDia.objetivo} (semana ${proximoDia.semana})`,
+      local: planoAtivo.local,
+      aquecimento: proximoDia.aquecimento,
+      aquecimentoMin: proximoDia.aquecimentoMin,
+      dicas: [proximoDia.cardioRecomendado, proximoDia.alongamento ? `Alongamento: ${proximoDia.alongamento}` : '']
+        .filter(Boolean)
+        .join(' · '),
+      exercicios: proximoDia.exercicios,
+      criadoEm: planoAtivo.criadoEm,
+    });
+  }
+
+  // Resumo de volume semanal (séries feitas por grupo corporal) — esta semana vs. semana anterior.
+  function volumePorGrupo(inicioMs: number, fimMs: number) {
+    const totais: Record<'superior' | 'inferior', number> = { superior: 0, inferior: 0 };
+    for (const s of dados.sessoes) {
+      const t = new Date(s.data).getTime();
+      if (t < inicioMs || t >= fimMs) continue;
+      for (const item of s.itens) {
+        const grupo = grupoCorporal(item.nome);
+        if (grupo === 'superior' || grupo === 'inferior') totais[grupo] += item.seriesFeitas.length;
+      }
+    }
+    return totais;
+  }
+  const agoraMs = Date.now();
+  const seteDiasMs = 7 * 24 * 60 * 60 * 1000;
+  const volumeEstaSemana = volumePorGrupo(agoraMs - seteDiasMs, agoraMs);
+  const volumeSemanaAnterior = volumePorGrupo(agoraMs - 2 * seteDiasMs, agoraMs - seteDiasMs);
+
   function registrarAtividadeLivre() {
     if (!atividadeLivre.trim()) return;
     const sessao: SessaoTreino = {
@@ -206,10 +258,10 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
 
       <div className="chips-tipo modo-treino">
         <button className={`chip ${modo === 'musculacao' ? 'ativa' : ''}`} onClick={() => setModo('musculacao')}>
-          🏋️ Musculação
+          <IconeMusculacao size={15} /> Musculação
         </button>
         <button className={`chip ${modo === 'corrida' ? 'ativa' : ''}`} onClick={() => setModo('corrida')}>
-          🏃 Corrida
+          <IconeCorrida size={15} /> Corrida
         </button>
       </div>
 
@@ -219,9 +271,76 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
         <>
       <AnamneseCard perfil={perfil} aoSalvar={aoAtualizarPerfil} />
 
+      {proximoDia && planoAtivo && (
+        <div className="cartao">
+          <h2><Zap size={19} /> Treino Sugerido para Hoje</h2>
+          <p className="objetivo-sugerido">
+            <strong>{proximoDia.objetivo}</strong> · {proximoDia.gruposMusculares} · ~{proximoDia.tempoEstimadoMin} min
+          </p>
+          <ol className="lista-compacta-exercicios">
+            {proximoDia.exercicios.slice(0, 5).map((e) => (
+              <li key={e.id}>{e.nome} — {e.series}x{e.repeticoes}</li>
+            ))}
+          </ol>
+          <button className="primario grande" onClick={iniciarTreinoSugerido}><IconeComecar size={17} /> Iniciar Treino</button>
+        </div>
+      )}
+
+      {(volumeEstaSemana.superior > 0 || volumeEstaSemana.inferior > 0 || volumeSemanaAnterior.superior > 0 || volumeSemanaAnterior.inferior > 0) && (
+        <div className="cartao">
+          <h2><IconeMusculacao size={19} /> Resumo de Volume Semanal</h2>
+          <div className="comparativos-bioimpedancia">
+            <div className="comparativo-metrica">
+              <small>Inferiores</small>
+              <strong>{volumeEstaSemana.inferior} séries</strong>
+              <div className="comparativo-barras">
+                <div className="comparativo-col">
+                  <span className="comparativo-valor">{volumeEstaSemana.inferior}</span>
+                  <div
+                    className="comparativo-barra"
+                    style={{ height: `${(volumeEstaSemana.inferior / Math.max(1, volumeEstaSemana.inferior, volumeSemanaAnterior.inferior)) * 100}%`, background: '#f59e0b' }}
+                  />
+                  <small>Esta semana</small>
+                </div>
+                <div className="comparativo-col">
+                  <span className="comparativo-valor">{volumeSemanaAnterior.inferior}</span>
+                  <div
+                    className="comparativo-barra anterior"
+                    style={{ height: `${(volumeSemanaAnterior.inferior / Math.max(1, volumeEstaSemana.inferior, volumeSemanaAnterior.inferior)) * 100}%` }}
+                  />
+                  <small>Anterior</small>
+                </div>
+              </div>
+            </div>
+            <div className="comparativo-metrica">
+              <small>Superiores</small>
+              <strong>{volumeEstaSemana.superior} séries</strong>
+              <div className="comparativo-barras">
+                <div className="comparativo-col">
+                  <span className="comparativo-valor">{volumeEstaSemana.superior}</span>
+                  <div
+                    className="comparativo-barra"
+                    style={{ height: `${(volumeEstaSemana.superior / Math.max(1, volumeEstaSemana.superior, volumeSemanaAnterior.superior)) * 100}%`, background: 'var(--verde)' }}
+                  />
+                  <small>Esta semana</small>
+                </div>
+                <div className="comparativo-col">
+                  <span className="comparativo-valor">{volumeSemanaAnterior.superior}</span>
+                  <div
+                    className="comparativo-barra anterior"
+                    style={{ height: `${(volumeSemanaAnterior.superior / Math.max(1, volumeEstaSemana.superior, volumeSemanaAnterior.superior)) * 100}%` }}
+                  />
+                  <small>Anterior</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dados.treinos.length > 0 && (
         <button className="primario grande botao-repetir" onClick={() => setTreinoAtivo(dados.treinos[0])}>
-          🔁 Repetir último treino ({dados.treinos[0].nome})
+          <Repeat size={17} /> Repetir último treino ({dados.treinos[0].nome})
         </button>
       )}
 
@@ -234,7 +353,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
       />
 
       <div className="cartao">
-        <h2>🏃 Atividade livre</h2>
+        <h2><IconeCorrida size={19} /> Atividade livre</h2>
         <label>Fez caminhada, corrida, bike, futebol? Registre aqui:</label>
         <div className="linha-add">
           <input
@@ -250,18 +369,18 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
         <h2>Meus treinos</h2>
         {dados.treinos.length === 0 && (
           <div className="estado-vazio">
-            <span className="icone-vazio">⚡</span>
+            <span className="icone-vazio"><Zap size={22} /></span>
             <p>Nenhum treino ainda. Gere um com o Coach acima!</p>
           </div>
         )}
         {dados.treinos.map((t) => (
           <details key={t.id} className="sugestao">
             <summary>
-              <strong>{LOCAIS.find((l) => l.value === t.local)?.emoji} {t.nome}</strong>
+              <strong>{(() => { const Icone = ICONE_LOCAL[t.local]; return <Icone size={15} />; })()} {t.nome}</strong>
               <small> {t.exercicios.length} exercícios</small>
             </summary>
             {t.aquecimento && (
-              <p>🔥 <strong>Aquecimento{t.aquecimentoMin ? ` (${t.aquecimentoMin} min)` : ''}:</strong> {t.aquecimento}</p>
+              <p><IconeAquecimento size={14} /> <strong>Aquecimento{t.aquecimentoMin ? ` (${t.aquecimentoMin} min)` : ''}:</strong> {t.aquecimento}</p>
             )}
             <ol>
               {t.exercicios.map((e) => {
@@ -280,7 +399,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
                     {grupo && grupo.length > 1 && posicaoNoGrupo < grupo.length
                       ? 'sem descanso (próximo do grupo)'
                       : `descanso ${e.descansoSeg}s`}
-                    {e.dicaRapida && <><br /><em>🗣️ "{e.dicaRapida}"</em></>}
+                    {e.dicaRapida && <><br /><em><MessageCircle size={13} /> "{e.dicaRapida}"</em></>}
                     {e.instrucoes && <><br /><small>{e.instrucoes}</small></>}
                     <br />
                     <a className="link-video" href={linkVideoExercicio(e.nome)} target="_blank" rel="noreferrer">
@@ -291,7 +410,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
                 );
               })}
             </ol>
-            {t.dicas && <p>💡 {t.dicas}</p>}
+            {t.dicas && <p><IconeDica size={14} /> {t.dicas}</p>}
             <div className="botoes">
               <button className="primario" onClick={() => setTreinoAtivo(t)}><IconeComecar size={16} /> Começar treino</button>
               <button onClick={() => setEditando(t)}><IconeEditar size={14} /> Editar</button>
@@ -315,7 +434,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
         <h2>Histórico</h2>
         {dados.sessoes.length === 0 && (
           <div className="estado-vazio">
-            <span className="icone-vazio">📋</span>
+            <span className="icone-vazio"><IconeAvaliacao size={22} /></span>
             <p>Nenhuma sessão registrada ainda.</p>
           </div>
         )}
@@ -405,11 +524,14 @@ function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalv
       <input value={t.nome} onChange={(e) => setT({ ...t, nome: e.target.value })} />
       <label>Local</label>
       <div className="chips-tipo">
-        {LOCAIS.map((l) => (
-          <button key={l.value} className={`chip ${t.local === l.value ? 'ativa' : ''}`} onClick={() => setT({ ...t, local: l.value })}>
-            {l.emoji} {l.label}
-          </button>
-        ))}
+        {LOCAIS.map((l) => {
+          const Icone = ICONE_LOCAL[l.value];
+          return (
+            <button key={l.value} className={`chip ${t.local === l.value ? 'ativa' : ''}`} onClick={() => setT({ ...t, local: l.value })}>
+              <Icone size={15} /> {l.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="linha">
@@ -437,7 +559,7 @@ function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalv
         return (
           <div key={e.id}>
             <div className="editor-exercicio">
-              {e.grupoId && <span className="badge-superset">🔗 Superset</span>}
+              {e.grupoId && <span className="badge-superset"><Link2 size={12} /> Superset</span>}
               <div className="linha-add">
                 <input value={e.nome} onChange={(ev) => setEx(i, 'nome', ev.target.value)} placeholder="Nome do exercício" />
                 <button className="mini" onClick={() => setT({ ...t, exercicios: t.exercicios.filter((x) => x.id !== e.id) })}>✕</button>
@@ -500,7 +622,7 @@ function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalv
             </div>
             {i < t.exercicios.length - 1 && (
               <button className="mini botao-ligar" onClick={() => alternarLigacao(i)}>
-                {ligado ? '✓ Unido ao próximo (bi/tri-set) — desfazer' : '🔗 Unir com o próximo (bi-set/tri-set)'}
+                {ligado ? '✓ Unido ao próximo (bi/tri-set) — desfazer' : <><Link2 size={13} /> Unir com o próximo (bi-set/tri-set)</>}
               </button>
             )}
           </div>

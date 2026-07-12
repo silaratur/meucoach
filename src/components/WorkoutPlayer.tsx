@@ -12,7 +12,7 @@ import {
   silenciar,
   vozDisponivel,
 } from '../speech';
-import { iconeEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
+import { tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
 import { trocarExercicio } from '../api';
 import { urlImagemExercicio } from '../media';
 import { MediaGallery } from './Midia';
@@ -27,11 +27,17 @@ import {
   IconeSalvar,
   IconeTrocar,
   IconeVideo,
+  IconeCoach,
+  IconeAquecimento,
+  IconeDica,
+  IconeMusculacao,
+  ICONE_EQUIPAMENTO,
 } from './Icones';
+import { Trophy, Volume2, VolumeX, Rocket, Wind, Smile, ThumbsUp, PersonStanding, Clapperboard, PartyPopper, Flame, X } from 'lucide-react';
 
 // Imagem ilustrativa gerada por IA (cacheada por nome no servidor) — clicável, abre o vídeo
 // de demonstração. Proporção fixa 4:3 evita "salto" de layout enquanto carrega.
-function ImagemExercicio({ nome, hrefVideo }: { nome: string; hrefVideo: string }) {
+function ImagemExercicio({ nome, hrefVideo, compacta }: { nome: string; hrefVideo: string; compacta?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
@@ -50,12 +56,36 @@ function ImagemExercicio({ nome, hrefVideo }: { nome: string; hrefVideo: string 
     };
   }, [nome]);
 
-  if (carregando) return <div className="imagem-exercicio imagem-exercicio-vazia"><IconeImagemIndisponivel size={22} /> Gerando ilustração...</div>;
+  const classe = `imagem-exercicio${compacta ? ' imagem-exercicio-mini' : ''}`;
+  if (carregando) return <div className={`${classe} imagem-exercicio-vazia`}><IconeImagemIndisponivel size={compacta ? 14 : 22} />{!compacta && ' Gerando ilustração...'}</div>;
   if (!url) return null;
   return (
-    <a className="imagem-exercicio" href={hrefVideo} target="_blank" rel="noreferrer">
+    <a className={classe} href={hrefVideo} target="_blank" rel="noreferrer" onClick={(e) => compacta && e.preventDefault()}>
       <img src={url} alt={`Demonstração: ${nome}`} loading="lazy" />
     </a>
+  );
+}
+
+// Carrossel horizontal com todos os exercícios do treino — destaca o atual e marca os já
+// concluídos (todas as rodadas feitas), pra dar visão do treino inteiro, não só da estação atual.
+function CarrosselExercicios({
+  exercicios,
+  atualId,
+  feito,
+}: {
+  exercicios: Exercicio[];
+  atualId: string | undefined;
+  feito: (ex: Exercicio) => boolean;
+}) {
+  return (
+    <div className="carrossel-exercicios">
+      {exercicios.map((ex) => (
+        <div key={ex.id} className={`carrossel-item ${ex.id === atualId ? 'ativo' : ''} ${feito(ex) ? 'feito' : ''}`}>
+          <ImagemExercicio nome={ex.nome} hrefVideo={linkVideoExercicio(ex.nome)} compacta />
+          {feito(ex) && <span className="carrossel-check"><IconeConcluido size={14} /></span>}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -125,7 +155,11 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const [rpe, setRpe] = useState<number | null>(null);
   const [trocando, setTrocando] = useState(false);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
-  const [perguntandoRir, setPerguntandoRir] = useState(false);
+  const [tempoTotalSeg, setTempoTotalSeg] = useState(0);
+  // RIR (repetições em reserva) da série atual — editável na tabela, gravado junto com a série
+  // ao concluir. Não reseta entre rodadas do mesmo exercício (só ao trocar de estação), pra
+  // manter o último valor como ponto de partida — é normal o RIR cair perto do fim do exercício.
+  const [rirAtual, setRirAtual] = useState(2);
 
   const inicioRef = useRef(Date.now());
   const timerRef = useRef<number | null>(null);
@@ -133,9 +167,6 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const contagemPrepRef = useRef<number | null>(null);
   const pararEscutaRef = useRef<(() => void) | null>(null);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
-  // Guarda ONDE gravar o RIR (índice do item/série) — capturado no momento da série final,
-  // porque exAtual/itensIdx já mudam pro próximo exercício antes da pessoa responder.
-  const rirAlvoRef = useRef<{ itensIdx: number; serieIdx: number } | null>(null);
 
   const blocoAtual = blocos[blocoIdx];
   const exAtual = blocoAtual?.exercicios[estacaoIdx];
@@ -148,6 +179,8 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const recordeAtual = exAtual ? maiorCargaHistorica(sessoes, exAtual.nome) : 0;
   const historicoExercicio = exAtual ? ultimasSeriesDoExercicio(sessoes, exAtual.nome) : [];
   const emEstadoPronto = fase === 'exercicio' && !preparando && !guiando;
+  const exAtualIdx = exAtual ? exerciciosState.findIndex((e) => e.id === exAtual.id) : -1;
+  const emPopup = fase === 'descanso' || preparando || guiando;
 
   useEffect(() => {
     setMostrarHistorico(false);
@@ -181,6 +214,13 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   useEffect(() => {
     definirVozHabilitada(vozOn);
   }, [vozOn]);
+
+  // Cronômetro do treino inteiro (independente das fases) — visível no topo durante todo o treino.
+  useEffect(() => {
+    if (fase === 'pronto' || fase === 'fim') return;
+    const id = window.setInterval(() => setTempoTotalSeg(Math.round((Date.now() - inicioRef.current) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [fase]);
 
   useEffect(
     () => () => {
@@ -297,6 +337,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     const primeiro = blocos[0]?.exercicios[0];
     const rec = primeiro ? cargaRecomendada(sessoes, primeiro.nome) : { motivo: '' };
     setCargaUsada(rec.cargaKg ? String(rec.cargaKg) : '');
+    setRirAtual(2);
     anunciarEstacao(0, 0, 1, true);
   }
 
@@ -376,18 +417,16 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
       const novo = [...prev];
       const seriesJaFeitas = novo[itensIdx]?.seriesFeitas ?? [];
       serieAnterior = seriesJaFeitas[seriesJaFeitas.length - 1];
-      if (ultimaRodada) rirAlvoRef.current = { itensIdx, serieIdx: seriesJaFeitas.length };
-      novo[itensIdx] = { ...novo[itensIdx], seriesFeitas: [...seriesJaFeitas, { reps, cargaKg: carga }] };
+      novo[itensIdx] = { ...novo[itensIdx], seriesFeitas: [...seriesJaFeitas, { reps, cargaKg: carga, rir: rirAtual }] };
       return novo;
     });
     setRepsFeitas('');
-    if (ultimaRodada) setPerguntandoRir(true);
 
     // Recorde pessoal: só comemora se já existia uma marca anterior para bater.
     if (carga && carga > 0) {
       const recordeAnterior = maiorCargaHistorica(sessoes, exAtual.nome);
       if (recordeAnterior > 0 && carga > recordeAnterior) {
-        const msg = `🏆 Recorde pessoal em ${exAtual.nome}: ${carga} kg!`;
+        const msg = `Recorde pessoal em ${exAtual.nome}: ${carga} kg!`;
         setRecorde(msg);
         falar(`Novo recorde pessoal! ${carga} quilos em ${exAtual.nome}. Mandou muito bem!`, { fila: true });
         window.setTimeout(() => setRecorde((r) => (r === msg ? null : r)), 6000);
@@ -401,6 +440,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
       setEstacaoIdx(proxEstIdx);
       const recProx = cargaRecomendada(sessoes, proxEx.nome);
       setCargaUsada(recProx.cargaKg ? String(recProx.cargaKg) : '');
+      setRirAtual(2);
       anunciarEstacao(blocoIdx, proxEstIdx, rodada, false);
       return;
     }
@@ -430,6 +470,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
         setRodada(1);
         const rec = proxBloco ? cargaRecomendada(sessoes, proxBloco.exercicios[0].nome) : { motivo: '' };
         setCargaUsada(rec.cargaKg ? String(rec.cargaKg) : '');
+        setRirAtual(2);
         anunciarEstacao(proxBlocoIdx, 0, 1, true);
       } else {
         setEstacaoIdx(0);
@@ -470,25 +511,6 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     return Math.round(v / 2.5) * 2.5;
   }
 
-  // RIR (repetições em reserva) — só perguntado na série final de cada exercício, pra não
-  // pesar a mão em toda série. Grava retroativamente na série que já foi salva em concluirEstacao.
-  function registrarRir(valor: number) {
-    const alvo = rirAlvoRef.current;
-    setPerguntandoRir(false);
-    rirAlvoRef.current = null;
-    if (!alvo) return;
-    setItens((prev) => {
-      const novo = [...prev];
-      const item = novo[alvo.itensIdx];
-      if (!item) return prev;
-      const series = [...item.seriesFeitas];
-      const serie = series[alvo.serieIdx];
-      if (!serie) return prev;
-      series[alvo.serieIdx] = { ...serie, rir: valor };
-      novo[alvo.itensIdx] = { ...item, seriesFeitas: series };
-      return novo;
-    });
-  }
 
   function aplicarAjuste(resposta: 'leve' | 'bom' | 'pesado') {
     setPerguntandoPeso(false);
@@ -522,6 +544,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
       );
       const rec = cargaRecomendada(sessoes, novoEx.nome);
       setCargaUsada(rec.cargaKg ? String(rec.cargaKg) : '');
+      setRirAtual(2);
       falar(`Trocado para ${novoEx.nome}. ${novoEx.instrucoes ?? ''}`);
     } catch (e) {
       alert('Não consegui sugerir uma troca agora: ' + (e as Error).message);
@@ -569,7 +592,6 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     setGuiando(false);
     setPreparando(false);
     setPerguntandoPeso(false);
-    setPerguntandoRir(false);
     if (blocoIdx >= blocos.length - 1) {
       finalizar();
       return;
@@ -582,6 +604,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     setFase('exercicio');
     const rec = cargaRecomendada(sessoes, proxBloco.exercicios[0].nome);
     setCargaUsada(rec.cargaKg ? String(rec.cargaKg) : '');
+    setRirAtual(2);
     anunciarEstacao(proxBlocoIdx, 0, 1, true);
   }
 
@@ -593,7 +616,6 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     setGuiando(false);
     setPreparando(false);
     setPerguntandoPeso(false);
-    setPerguntandoRir(false);
     liberarTela();
     setFase('fim');
     falar(`Treino concluído, ${perfil.nome}! Você foi incrível hoje. Alonga, hidrata e descansa — o músculo cresce no descanso.`);
@@ -623,12 +645,26 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
           <h2><IconeComecar size={19} /> {treino.nome}</h2>
           {vozDisponivel() && (
             <button className="chip" onClick={() => setVozOn(!vozOn)}>
-              {vozOn ? '🔊 Voz ligada' : '🔇 Voz desligada'}
+              {vozOn ? <><Volume2 size={15} /> Voz ligada</> : <><VolumeX size={15} /> Voz desligada</>}
             </button>
           )}
         </div>
+        {fase !== 'pronto' && fase !== 'fim' && (
+          <div className="player-topo-timers">
+            <span className="timer-total">
+              {String(Math.floor(tempoTotalSeg / 60)).padStart(2, '0')}:{String(tempoTotalSeg % 60).padStart(2, '0')}
+              <small>Duração</small>
+            </span>
+            {fase === 'descanso' && (
+              <span className="timer-intervalo">
+                <Wind size={13} /> {minutos}:{segundos}
+                <small>Intervalo</small>
+              </span>
+            )}
+          </div>
+        )}
 
-        {recorde && <div className="banner-recorde">{recorde}</div>}
+        {recorde && <div className="banner-recorde"><Trophy size={15} /> {recorde}</div>}
 
         {fase === 'pronto' && (
           <div className="centro">
@@ -640,18 +676,18 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
               .
               {treino.aquecimento && (
                 <>
-                  <br />🔥 Aquecimento{treino.aquecimentoMin ? ` (${treino.aquecimentoMin} min)` : ''}: {treino.aquecimento}
+                  <br /><IconeAquecimento size={14} /> Aquecimento{treino.aquecimentoMin ? ` (${treino.aquecimentoMin} min)` : ''}: {treino.aquecimento}
                 </>
               )}
             </p>
-            <button className="primario grande" onClick={comecar}>🚀 Começar</button>
+            <button className="primario grande" onClick={comecar}><Rocket size={17} /> Começar</button>
             <button onClick={aoCancelar}>Voltar</button>
           </div>
         )}
 
         {fase === 'aquecimento' && (
           <div className="centro descanso">
-            <p className="rotulo-descanso">🔥 Aquecimento e mobilidade</p>
+            <p className="rotulo-descanso"><IconeAquecimento size={15} /> Aquecimento e mobilidade</p>
             {treino.aquecimento && <p className="instrucao">{treino.aquecimento}</p>}
             <div className="timer">{minutos}:{segundos}</div>
             <button className="secundario" onClick={pularAquecimento}><IconePular size={16} /> Pular aquecimento</button>
@@ -660,6 +696,14 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
         {(fase === 'exercicio' || fase === 'descanso') && exAtual && blocoAtual && (
           <>
+            <CarrosselExercicios
+              exercicios={exerciciosState}
+              atualId={exAtual.id}
+              feito={(ex) => {
+                const idx = exerciciosState.findIndex((e) => e.id === ex.id);
+                return (itens[idx]?.seriesFeitas.length ?? 0) >= ex.series;
+              }}
+            />
             <p className="progresso">
               Bloco {blocoIdx + 1} de {blocos.length}
               {ehSuperset && ` · Estação ${estacaoIdx + 1} de ${blocoAtual.exercicios.length}`}
@@ -668,13 +712,13 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
               <span className="badge-superset">{blocoAtual.exercicios.length === 3 ? 'Tri-set' : 'Bi-set'}</span>
             )}
             <h3 className="nome-exercicio">
-              {iconeEquipamento(exAtual.nome)} {exAtual.nome}
-              {recordeAtual > 0 && <span className="badge-recorde">🏆 {recordeAtual}kg</span>}
+              {(() => { const Icone = ICONE_EQUIPAMENTO[tipoEquipamento(exAtual.nome)]; return <Icone size={17} />; })()} {exAtual.nome}
+              {recordeAtual > 0 && <span className="badge-recorde"><Trophy size={13} /> {recordeAtual}kg</span>}
             </h3>
             <p className="serie-info">
               Rodada <strong>{rodada}</strong> de {totalRodadasBloco} · {exAtual.repeticoes} repetições
             </p>
-            {exAtual.instrucoes && <p className="instrucao">💡 {exAtual.instrucoes}</p>}
+            {exAtual.instrucoes && <p className="instrucao"><IconeDica size={14} /> {exAtual.instrucoes}</p>}
 
             <ImagemExercicio nome={exAtual.nome} hrefVideo={linkVideoExercicio(exAtual.nome)} />
 
@@ -687,7 +731,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
               </button>
               {emEstadoPronto && (
                 <button className="pill-acao" onClick={trocarExercicioAtual} disabled={trocando}>
-                  {trocando ? '🤖 Buscando...' : <><IconeTrocar size={15} /> Trocar</>}
+                  {trocando ? <><IconeCoach size={15} /> Buscando...</> : <><IconeTrocar size={15} /> Trocar</>}
                 </button>
               )}
             </div>
@@ -712,83 +756,118 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
             <MediaGallery midias={exAtual.midias} />
             <p className="recomendacao">
-              🏋️ {recomendacao.cargaKg ? `Carga recomendada: ${recomendacao.cargaKg} kg — ` : ''}{recomendacao.motivo}
+              <IconeMusculacao size={14} /> {recomendacao.cargaKg ? `Carga recomendada: ${recomendacao.cargaKg} kg — ` : ''}{recomendacao.motivo}
             </p>
 
-            {fase === 'descanso' ? (
-              <div className="centro descanso">
-                <p className="rotulo-descanso">😮‍💨 Descanso</p>
-                <div className="timer">{minutos}:{segundos}</div>
-                {perguntandoPeso && (
-                  <div className="pergunta-peso">
-                    <p><IconeMicrofone size={15} /> {escutando ? 'Estou ouvindo... como ficou o peso?' : 'Como ficou o peso?'}</p>
-                    <div className="botoes centro-botoes">
-                      <button onClick={() => aplicarAjuste('leve')}>😌 Leve</button>
-                      <button className="primario" onClick={() => aplicarAjuste('bom')}>👍 Bom</button>
-                      <button onClick={() => aplicarAjuste('pesado')}>🥵 Pesado</button>
-                    </div>
-                  </div>
-                )}
-                {perguntandoRir && (
-                  <div className="pergunta-rir">
-                    <p>🎯 Última série desse exercício: quantas repetições ainda tinha de sobra?</p>
-                    <div className="botoes centro-botoes">
-                      {[0, 1, 2, 3, 4].map((n) => (
-                        <button key={n} onClick={() => registrarRir(n)}>{n === 4 ? '4+' : n}</button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="botoes centro-botoes">
-                  <button className="secundario" onClick={pularDescanso}><IconePular size={16} /> Pular descanso</button>
-                  <button onClick={() => setRestante((r) => Math.max(1, r - 15))}>−15s</button>
-                  <button onClick={() => setRestante((r) => r + 15)}>+15s</button>
-                </div>
+            <div className="tabela-series">
+              <div className="tabela-series-linha tabela-series-cabecalho">
+                <span>#</span><span>Rep.</span><span>Kg</span><span>RIR</span><span />
               </div>
-            ) : preparando ? (
-              <div className="centro">
-                <p className="rotulo-descanso">🧍 Posicione-se no aparelho...</p>
-                <div className="timer">{contagemPrep}</div>
-              </div>
-            ) : guiando ? (
-              <div className="centro">
-                <p className="rotulo-descanso">🎬 Série guiada — acompanha o ritmo!</p>
-                <div className="timer">{repAtual}</div>
-                <button className="primario grande" onClick={() => terminarSerieGuiada(repAtual || 1, alvoDe(exAtual.repeticoes).emSegundos)}>
-                  <IconeConcluido size={18} /> Terminei
-                </button>
+              {Array.from({ length: exAtual.series }, (_, i) => {
+                const serieFeita = itens[exAtualIdx]?.seriesFeitas[i];
+                const ehAtual = !serieFeita && i === rodada - 1 && !emPopup;
+                const corRir = (v: number) => (v <= 1 ? '#f97316' : v === 2 ? '#eab308' : '#22c55e');
+                return (
+                  <div key={i} className={`tabela-series-linha ${serieFeita ? 'feita' : ''} ${ehAtual ? 'atual' : ''}`}>
+                    <span>{i + 1}</span>
+                    <span>
+                      {ehAtual ? (
+                        <input
+                          className="celula-serie"
+                          type="number"
+                          inputMode="numeric"
+                          value={repsFeitas}
+                          onChange={(e) => setRepsFeitas(e.target.value)}
+                          placeholder={exAtual.repeticoes}
+                        />
+                      ) : (
+                        <span className="celula-serie celula-serie-fixa">{serieFeita?.reps ?? exAtual.repeticoes}</span>
+                      )}
+                    </span>
+                    <span>
+                      {ehAtual ? (
+                        <input
+                          className="celula-serie"
+                          type="number"
+                          inputMode="decimal"
+                          value={cargaUsada}
+                          onChange={(e) => setCargaUsada(e.target.value)}
+                          placeholder={exAtual.cargaSugerida || '—'}
+                        />
+                      ) : (
+                        <span className="celula-serie celula-serie-fixa">{serieFeita?.cargaKg ?? cargaUsada ?? '—'}</span>
+                      )}
+                    </span>
+                    <span>
+                      <button
+                        type="button"
+                        className="badge-rir"
+                        disabled={!ehAtual}
+                        style={{ background: corRir(serieFeita?.rir ?? rirAtual) }}
+                        onClick={() => ehAtual && setRirAtual((r) => (r + 1) % 5)}
+                      >
+                        {serieFeita?.rir ?? rirAtual}
+                      </button>
+                    </span>
+                    <span>
+                      <input
+                        type="checkbox"
+                        className="checkbox-serie"
+                        checked={!!serieFeita}
+                        disabled={!ehAtual}
+                        onChange={() => ehAtual && concluirEstacao()}
+                      />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {emPopup ? (
+              <div className="popup-descanso">
+                {fase === 'descanso' && (
+                  <button className="popup-fechar" onClick={pularDescanso} title="Pular descanso"><X size={16} /></button>
+                )}
+                {fase === 'descanso' ? (
+                  <>
+                    <p className="rotulo-descanso"><Wind size={16} /> Descanso</p>
+                    <div className="timer">{minutos}:{segundos}</div>
+                    {perguntandoPeso && (
+                      <div className="pergunta-peso">
+                        <p><IconeMicrofone size={15} /> {escutando ? 'Estou ouvindo... como ficou o peso?' : 'Como ficou o peso?'}</p>
+                        <div className="botoes centro-botoes">
+                          <button onClick={() => aplicarAjuste('leve')}><Smile size={15} /> Leve</button>
+                          <button className="primario" onClick={() => aplicarAjuste('bom')}><ThumbsUp size={15} /> Bom</button>
+                          <button onClick={() => aplicarAjuste('pesado')}><Flame size={15} /> Pesado</button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="botoes centro-botoes">
+                      <button onClick={() => setRestante((r) => Math.max(1, r - 5))}>−5s</button>
+                      <button onClick={() => setRestante((r) => r + 5)}>+5s</button>
+                    </div>
+                  </>
+                ) : preparando ? (
+                  <>
+                    <p className="rotulo-descanso"><PersonStanding size={16} /> Posicione-se no aparelho...</p>
+                    <div className="timer">{contagemPrep}</div>
+                  </>
+                ) : (
+                  <>
+                    <p className="rotulo-descanso"><Clapperboard size={16} /> Série guiada — acompanha o ritmo!</p>
+                    <div className="timer">{repAtual}</div>
+                    <button className="primario grande" onClick={() => terminarSerieGuiada(repAtual || 1, alvoDe(exAtual.repeticoes).emSegundos)}>
+                      <IconeConcluido size={18} /> Terminei
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
-              <div className="centro">
-                <div className="linha">
-                  <div>
-                    <label>Repetições feitas</label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={repsFeitas}
-                      onChange={(e) => setRepsFeitas(e.target.value)}
-                      placeholder={exAtual.repeticoes}
-                    />
-                  </div>
-                  <div>
-                    <label>Carga (kg)</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={cargaUsada}
-                      onChange={(e) => setCargaUsada(e.target.value)}
-                      placeholder={exAtual.cargaSugerida || '—'}
-                    />
-                  </div>
-                </div>
-                {vozDisponivel() && vozOn && (
-                  <button className="destaque grande" onClick={iniciarSerieGuiada}>
-                    🎬 Série guiada (eu conto o ritmo com você)
-                  </button>
-                )}
-                <button className="primario grande" onClick={() => concluirEstacao()}><IconeConcluido size={18} /> Série concluída</button>
-              </div>
+              vozDisponivel() && vozOn && (
+                <button className="destaque grande" onClick={iniciarSerieGuiada}>
+                  <Clapperboard size={16} /> Série guiada (eu conto o ritmo com você)
+                </button>
+              )
             )}
 
             <div className="botoes rodape-player">
@@ -802,7 +881,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
         {fase === 'fim' && (
           <div className="centro celebracao">
-            <h3>🎉 Treino concluído!</h3>
+            <h3><PartyPopper size={20} /> Treino concluído!</h3>
             <p>
               {itens.reduce((acc, i) => acc + i.seriesFeitas.length, 0)} séries em{' '}
               {Math.max(1, Math.round((Date.now() - inicioRef.current) / 60000))} minutos. Mandou bem demais!

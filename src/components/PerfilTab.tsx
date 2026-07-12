@@ -3,7 +3,8 @@ import type { Perfil } from '../types';
 import { OBJETIVOS, SUPLEMENTOS_COMUNS } from '../types';
 import { idadeDe } from '../calc';
 import { aplicarTema } from '../theme';
-import { IconeExcluir, IconeSalvar } from './Icones';
+import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
+import { Moon, Sun, LogOut } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -57,15 +58,15 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
 
   return (
     <div className="cartao">
-      <h2>👤 Seu perfil</h2>
+      <h2><IconePerfil size={19} /> Seu perfil</h2>
 
       <label>Tema do aplicativo</label>
       <div className="chips-tipo">
         <button type="button" className={`chip ${(form.tema ?? 'escuro') === 'escuro' ? 'ativa' : ''}`} onClick={() => trocarTema('escuro')}>
-          🌙 Escuro
+          <Moon size={15} /> Escuro
         </button>
         <button type="button" className={`chip ${form.tema === 'claro' ? 'ativa' : ''}`} onClick={() => trocarTema('claro')}>
-          ☀️ Claro
+          <Sun size={15} /> Claro
         </button>
       </div>
 
@@ -142,7 +143,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
 
       <div className="botoes conta-acoes">
         <button className="secundario" onClick={() => { if (confirm('Sair deste aparelho? Seus dados continuam salvos — é só entrar de novo com seu nome e PIN.')) aoSair(); }}>
-          🚪 Sair deste aparelho
+<LogOut size={16} /> Sair deste aparelho
         </button>
         <button
           className="perigo"

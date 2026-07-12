@@ -424,6 +424,17 @@ button:disabled { opacity: 0.6; }
 .item-recorde small { color: var(--texto-suave); }
 .player-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .player-topo .chip { background: var(--fundo); border-color: var(--borda); color: var(--texto); }
+.player-topo-timers { display: flex; gap: 18px; margin-top: 8px; }
+.timer-total, .timer-intervalo {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  color: var(--texto);
+}
+.timer-intervalo { color: var(--verde-escuro); flex-direction: row; align-items: center; gap: 4px; }
+.timer-total small, .timer-intervalo small { font-size: 0.68rem; font-weight: 400; color: var(--texto-suave); }
 .progresso { color: var(--texto-suave); font-size: 0.85rem; margin: 8px 0 0; }
 .nome-exercicio { font-size: 1.5rem; margin: 4px 0; }
 .serie-info { font-size: 1.05rem; margin: 4px 0; }
@@ -556,6 +567,35 @@ button.destaque {
 .barra-meta-cheia.estourou { background: #d97706; }
 .meta-texto { font-size: 0.85rem; color: var(--texto-suave); margin: 4px 0; }
 
+/* ---------- Resumo de macros (Hoje) ---------- */
+.macro-resumo { display: flex; flex-direction: column; gap: 2px; margin: 10px 0 14px; }
+.macro-linha-titulo { display: flex; justify-content: space-between; align-items: center; font-size: 0.92rem; margin-top: 8px; }
+.macro-linha-titulo strong { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.macro-linha-titulo span { font-variant-numeric: tabular-nums; color: var(--texto-suave); }
+.macro-simples { display: flex; justify-content: space-between; align-items: center; font-size: 0.88rem; padding: 6px 0; border-top: 1px solid var(--borda); }
+.macro-simples .rotulo { display: flex; align-items: center; gap: 6px; color: var(--texto-suave); }
+.macro-simples strong { font-variant-numeric: tabular-nums; }
+
+/* ---------- Seletor de refeição em segmento único (chips conectados) ---------- */
+.chips-tipo.segmentado {
+  background: var(--superficie);
+  border-radius: 14px;
+  padding: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 12px;
+}
+.chips-tipo.segmentado .chip {
+  flex: 1 1 auto;
+  min-width: 30%;
+  text-align: center;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+}
+.chips-tipo.segmentado .chip.ativa { background: var(--verde); border-color: var(--verde); }
+
 /* ---------- Gráficos (Evolução) ---------- */
 .grafico {
   width: 100%;
@@ -569,16 +609,88 @@ button.destaque {
 .resumo-evolucao .bom { color: var(--verde-escuro); }
 .resumo-evolucao .atencao { color: var(--tom-atencao-texto); }
 
-/* ---------- Bioimpedância / balança ---------- */
-.linha-aneis {
-  display: flex;
-  justify-content: space-around;
-  gap: 6px;
-  margin: 8px 0;
+/* ---------- Medidor de peso & progresso (Evolução) ---------- */
+.peso-grande { font-size: 2.2rem; font-weight: 700; margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
+.medidor-peso { margin: 10px 0 4px; }
+.medidor-peso-trilha {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ef4444, #f59e0b, var(--verde));
+  position: relative;
 }
-.anel-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.anel-svg { width: 78px; height: 78px; }
-.anel-item small { color: var(--texto-suave); font-size: 0.72rem; text-align: center; }
+.medidor-peso-marcador {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fundo);
+  border: 3px solid var(--texto);
+  transform: translate(-50%, -50%);
+  transition: left 0.4s;
+}
+.medidor-peso-extremos { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--texto-suave); margin-top: 6px; }
+.celebracao-peso { text-align: center; font-weight: 600; margin: 10px 0; }
+.celebracao-peso.bom { color: var(--verde-escuro); }
+.celebracao-peso.atencao { color: var(--tom-atencao-texto); }
+.tiles-peso { display: flex; gap: 8px; margin: 4px 0 14px; }
+.tiles-peso > div { flex: 1; background: var(--superficie); border-radius: 10px; padding: 8px 6px; text-align: center; }
+.tiles-peso small { display: block; color: var(--texto-suave); font-size: 0.72rem; }
+.tiles-peso strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+
+/* ---------- Comparativo de bioimpedância (atual vs. anterior) ---------- */
+.comparativos-bioimpedancia { display: flex; gap: 16px; margin: 8px 0 14px; }
+.comparativo-metrica { flex: 1; text-align: center; }
+.comparativo-metrica small { color: var(--texto-suave); font-size: 0.78rem; }
+.comparativo-metrica strong { display: block; font-size: 1.15rem; margin: 2px 0 8px; }
+.comparativo-barras { display: flex; justify-content: center; align-items: flex-end; gap: 14px; height: 90px; }
+.comparativo-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; width: 46px; }
+.comparativo-valor { font-size: 0.72rem; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.comparativo-barra { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height 0.4s; }
+.comparativo-barra.anterior { background: var(--borda); }
+.comparativo-col small { color: var(--texto-suave); font-size: 0.7rem; margin-top: 4px; }
+
+/* ---------- Resumo do Coach: macros de hoje / pontos de atenção ---------- */
+.resumo-duas-colunas { display: flex; gap: 16px; margin: 10px 0 12px; }
+.coluna-resumo { flex: 1; min-width: 0; }
+.rotulo-coluna { font-size: 0.85rem; font-weight: 600; margin: 0 0 8px; }
+.mini-barra-linha { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.mini-barra-linha .barra-meta { flex: 1; margin: 0; }
+.barra-meta.mini { height: 7px; }
+.mini-barra-linha span { font-size: 0.78rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ponto-atencao { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; margin: 0 0 8px; color: var(--tom-atencao-texto); }
+.ponto-atencao strong { font-variant-numeric: tabular-nums; }
+.num-destaque { font-weight: 700; color: var(--verde-escuro); }
+
+/* ---------- Cabeçalho da avaliação: stepper de completude do dia ---------- */
+.cabecalho-avaliacao { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stepper-completude { display: flex; align-items: center; gap: 4px; }
+.stepper-ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--borda); }
+.stepper-ponto.feito { background: var(--verde); }
+
+/* ---------- Cards de ação (checklist extraído da avaliação) ---------- */
+.cartao-acao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.cartao-acao input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--verde); }
+.cartao-acao.feito { opacity: 0.6; }
+.cartao-acao.feito span { text-decoration: line-through; }
+
+/* ---------- Treino sugerido para hoje ---------- */
+.objetivo-sugerido { font-size: 0.92rem; margin: 4px 0 8px; }
+.lista-compacta-exercicios { margin: 0 0 10px; padding-left: 20px; font-size: 0.88rem; color: var(--texto-suave); }
+.lista-compacta-exercicios li { margin: 2px 0; }
+
+/* ---------- Bioimpedância / balança ---------- */
 .streak-texto {
   text-align: center;
   background: var(--tom-atencao-bg);
@@ -631,6 +743,106 @@ button.destaque {
   aspect-ratio: 4 / 3;
   color: var(--texto-suave);
   font-size: 0.85rem;
+}
+
+/* ---------- Carrossel de exercícios (WorkoutPlayer) ---------- */
+.carrossel-exercicios { display: flex; gap: 8px; overflow-x: auto; margin: 10px 0; padding-bottom: 2px; }
+.carrossel-item { position: relative; flex: 0 0 auto; width: 56px; opacity: 0.55; transition: opacity 0.2s; }
+.carrossel-item.ativo { opacity: 1; }
+.carrossel-item.feito { opacity: 0.75; }
+.carrossel-item .imagem-exercicio-mini {
+  width: 56px;
+  height: 56px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  margin: 0;
+  border: 2px solid var(--borda);
+}
+.carrossel-item.ativo .imagem-exercicio-mini { border-color: var(--verde); }
+.carrossel-item .imagem-exercicio-mini.imagem-exercicio-vazia { aspect-ratio: 1; font-size: 0; }
+.carrossel-check {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--verde);
+  color: #04120a;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Tabela de séries do exercício atual (WorkoutPlayer) ---------- */
+.tabela-series { margin: 10px 0; border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; }
+.tabela-series-linha {
+  display: grid;
+  grid-template-columns: 24px 1fr 1fr 40px 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--borda);
+  text-align: center;
+}
+.tabela-series-linha:last-child { border-bottom: none; }
+.tabela-series-cabecalho { font-size: 0.68rem; color: var(--texto-suave); background: var(--superficie); text-transform: uppercase; }
+.tabela-series-linha.atual { background: var(--tom-sucesso-bg); font-weight: 600; }
+.tabela-series-linha.feita { color: var(--texto-suave); }
+.celula-serie {
+  width: 100%;
+  text-align: center;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 4px 2px;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+.celula-serie-fixa { display: inline-block; background: transparent; border-color: transparent; color: inherit; }
+.badge-rir {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  color: #1a1a1a;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.badge-rir:disabled { opacity: 0.85; }
+.checkbox-serie { width: 20px; height: 20px; accent-color: var(--verde); }
+.checkbox-serie:disabled { opacity: 0.5; }
+
+/* ---------- Pop-up flutuante: série guiada / descanso (WorkoutPlayer) ---------- */
+.popup-descanso {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(92vw, 420px);
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  padding: 18px;
+  text-align: center;
+  z-index: 40;
+}
+.popup-fechar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px;
+  border-radius: 50%;
+  line-height: 0;
+  background: var(--superficie);
+  border-color: var(--borda);
 }
 .badge-recorde {
   display: inline-block;

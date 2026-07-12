@@ -4,7 +4,8 @@ import { DIAS_SEMANA } from '../types';
 import { uid } from '../storage';
 import { gerarPlanoCorrida } from '../api';
 import RunPlayer from './RunPlayer';
-import { IconeComecar, IconeExcluir } from './Icones';
+import { IconeComecar, IconeExcluir, IconeCorrida, IconeAvaliacao, IconeMusculacao, IconeCoach, IconeDica } from './Icones';
+import { Zap, CalendarDays } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -120,14 +121,14 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
   return (
     <div>
       <div className="cartao">
-        <h2>🏃 Correr agora</h2>
+        <h2><IconeCorrida size={19} /> Correr agora</h2>
         <p className="meta-texto">GPS + coach por voz: distância, ritmo e incentivo a cada 500 metros.</p>
         <button className="primario grande" onClick={() => setCorrendo('')}><IconeComecar size={17} /> Iniciar corrida livre</button>
       </div>
 
       {!plano && (
         <div className="cartao">
-          <h2>📋 Avaliação do corredor</h2>
+          <h2><IconeAvaliacao size={19} /> Avaliação do corredor</h2>
           <p className="meta-texto">Me conta sobre você e eu monto um plano dia a dia, como um assessor esportivo.</p>
 
           <label>Seu nível na corrida</label>
@@ -159,7 +160,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
           </div>
           {perfil.diasMusculacao?.length ? (
             <p className="meta-texto">
-              🏋️ Musculação: {perfil.diasMusculacao.map((d) => d.slice(0, 3)).join('/')} — vou montar a corrida se
+              <IconeMusculacao size={14} /> Musculação: {perfil.diasMusculacao.map((d) => d.slice(0, 3)).join('/')} — vou montar a corrida se
               encaixando nesses dias, como um plano só.
             </p>
           ) : null}
@@ -171,7 +172,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
           <textarea value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: tenho uma prova de 5k em setembro; prefiro correr de manhã" />
 
           <button className="primario grande" onClick={gerar} disabled={gerando}>
-            {gerando ? '🤖 Montando seu plano...' : '⚡ Gerar meu plano de corrida'}
+            {gerando ? <><IconeCoach size={17} /> Montando seu plano...</> : <><Zap size={17} /> Gerar meu plano de corrida</>}
           </button>
           {erro && <p className="erro">{erro}</p>}
         </div>
@@ -179,7 +180,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
 
       {plano && (
         <div className="cartao">
-          <h2>🗓️ {plano.nome}</h2>
+          <h2><CalendarDays size={19} /> {plano.nome}</h2>
           <p className="meta-texto">
             {plano.objetivo} · <strong>{feitos}/{plano.dias.length}</strong> treinos concluídos
           </p>
@@ -226,7 +227,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
             </details>
           ))}
 
-          {plano.dicas && <p>💡 {plano.dicas}</p>}
+          {plano.dicas && <p><IconeDica size={14} /> {plano.dicas}</p>}
           <div className="botoes">
             <button
               className="perigo"
@@ -245,7 +246,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
         <h2>Minhas corridas</h2>
         {dados.sessoes.filter((s) => s.corrida).length === 0 && (
           <div className="estado-vazio">
-            <span className="icone-vazio">🏃</span>
+            <span className="icone-vazio"><IconeCorrida size={22} /></span>
             <p>Nenhuma corrida registrada ainda. Bora estrear o GPS?</p>
           </div>
         )}
