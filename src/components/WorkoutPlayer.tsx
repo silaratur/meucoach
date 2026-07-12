@@ -14,7 +14,7 @@ import {
 } from '../speech';
 import { tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
 import { trocarExercicio } from '../api';
-import { urlImagemExercicio } from '../media';
+import { urlImagemExercicio, musculoExercicio, type MusculoExercicio } from '../media';
 import { MediaGallery } from './Midia';
 import {
   IconeComecar,
@@ -35,21 +35,33 @@ import {
 } from './Icones';
 import { Trophy, Volume2, VolumeX, Rocket, Wind, Smile, ThumbsUp, PersonStanding, Clapperboard, PartyPopper, Flame, X } from 'lucide-react';
 
-// Imagem ilustrativa gerada por IA (cacheada por nome no servidor) — clicável, abre o vídeo
-// de demonstração. Proporção fixa 4:3 evita "salto" de layout enquanto carrega.
+// Ilustração do exercício — tenta primeiro o músculo trabalhado via wger.de (base aberta,
+// cacheada por nome no servidor); se não achar correspondência, cai para a imagem gerada por
+// IA (mesmo cache/endpoint de sempre). Clicável, abre o vídeo de demonstração. Proporção fixa
+// 4:3 evita "salto" de layout enquanto carrega.
 function ImagemExercicio({ nome, hrefVideo, compacta }: { nome: string; hrefVideo: string; compacta?: boolean }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [musculo, setMusculo] = useState<MusculoExercicio | null>(null);
+  const [urlIA, setUrlIA] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     let cancelado = false;
     setCarregando(true);
-    setUrl(null);
-    urlImagemExercicio(nome).then((u) => {
-      if (!cancelado) {
-        setUrl(u);
+    setMusculo(null);
+    setUrlIA(null);
+    musculoExercicio(nome).then((m) => {
+      if (cancelado) return;
+      if (m?.svgUrl) {
+        setMusculo(m);
         setCarregando(false);
+        return;
       }
+      urlImagemExercicio(nome).then((u) => {
+        if (!cancelado) {
+          setUrlIA(u);
+          setCarregando(false);
+        }
+      });
     });
     return () => {
       cancelado = true;
@@ -58,10 +70,20 @@ function ImagemExercicio({ nome, hrefVideo, compacta }: { nome: string; hrefVide
 
   const classe = `imagem-exercicio${compacta ? ' imagem-exercicio-mini' : ''}`;
   if (carregando) return <div className={`${classe} imagem-exercicio-vazia`}><IconeImagemIndisponivel size={compacta ? 14 : 22} />{!compacta && ' Gerando ilustração...'}</div>;
-  if (!url) return null;
+
+  if (musculo?.svgUrl) {
+    return (
+      <a className={`${classe} imagem-exercicio-musculo`} href={hrefVideo} target="_blank" rel="noreferrer" onClick={(e) => compacta && e.preventDefault()}>
+        <img src={musculo.svgUrl} alt={`Músculo trabalhado: ${musculo.musculoNome || nome}`} loading="lazy" />
+        {!compacta && <span className="legenda-musculo">{musculo.musculoNome} · wger.de (CC BY-SA)</span>}
+      </a>
+    );
+  }
+
+  if (!urlIA) return null;
   return (
     <a className={classe} href={hrefVideo} target="_blank" rel="noreferrer" onClick={(e) => compacta && e.preventDefault()}>
-      <img src={url} alt={`Demonstração: ${nome}`} loading="lazy" />
+      <img src={urlIA} alt={`Demonstração: ${nome}`} loading="lazy" />
     </a>
   );
 }

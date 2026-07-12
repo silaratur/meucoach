@@ -43,6 +43,16 @@ CREATE TABLE IF NOT EXISTS imagens_exercicio (
   dados BLOB NOT NULL,
   criado_em TEXT NOT NULL
 );
+
+-- Correspondência exercício → músculo (wger.de, base aberta CC-BY-SA), cache GLOBAL por nome
+-- normalizado. svg_url NULL significa "já buscou e não achou correspondência confiável"
+-- (evita repetir a busca fuzzy a cada chamada).
+CREATE TABLE IF NOT EXISTS musculo_exercicio (
+  nome TEXT PRIMARY KEY,
+  svg_url TEXT,
+  musculo_nome TEXT,
+  encontrado_em TEXT NOT NULL
+);
 `);
 
 // Segredo para assinar os tokens de sessão: gerado uma vez e persistido em disco

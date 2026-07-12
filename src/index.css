@@ -734,6 +734,19 @@ button.destaque {
   border: 1px solid var(--borda);
 }
 .imagem-exercicio img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.imagem-exercicio-musculo { position: relative; }
+.imagem-exercicio-musculo img { object-fit: contain; padding: 14px; background: var(--fundo); }
+.legenda-musculo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+  background: color-mix(in srgb, var(--superficie) 85%, transparent);
+  text-align: center;
+}
 .imagem-exercicio-vazia {
   display: flex;
   flex-direction: column;
@@ -760,6 +773,7 @@ button.destaque {
 }
 .carrossel-item.ativo .imagem-exercicio-mini { border-color: var(--verde); }
 .carrossel-item .imagem-exercicio-mini.imagem-exercicio-vazia { aspect-ratio: 1; font-size: 0; }
+.carrossel-item .imagem-exercicio-mini.imagem-exercicio-musculo img { padding: 6px; }
 .carrossel-check {
   position: absolute;
   top: -4px;

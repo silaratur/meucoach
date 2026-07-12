@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
 import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, totaisDoDia } from './calc.mjs';
+import { buscarMusculoExercicio } from './wger.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -202,6 +203,18 @@ app.get('/api/exercicio-imagem', autenticar, async (req, res) => {
     res.send(dados);
   } catch (e) {
     res.status(502).json({ error: 'Falha ao gerar imagem do exercício: ' + e.message });
+  }
+});
+
+// ---------- Grupo muscular do exercício (wger.de, base aberta — fallback gratuito ao banco 3D) ----------
+app.get('/api/exercicio-musculo', autenticar, async (req, res) => {
+  const nomeExercicio = String(req.query.nome || '').trim();
+  if (!nomeExercicio) return res.status(400).json({ error: 'Nome do exercício obrigatório.' });
+  try {
+    const resultado = await buscarMusculoExercicio(nomeExercicio);
+    res.json(resultado ?? { svgUrl: null, musculoNome: null });
+  } catch (e) {
+    res.status(502).json({ error: 'Falha ao buscar músculo do exercício: ' + e.message });
   }
 });
 
