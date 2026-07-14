@@ -64,8 +64,8 @@ const FAQ = [
     r: 'Só depois dos 7 dias grátis. Cancelando antes do fim do teste, você não paga nada.',
   },
   {
-    p: 'Preciso informar cartão pra começar?',
-    r: 'Sim, o Mercado Pago exige o cartão pra ativar o período de teste — mas a cobrança só acontece depois dos 7 dias, e só se você não cancelar antes.',
+    p: 'Preciso pagar com cartão?',
+    r: 'Você escolhe no checkout do Mercado Pago — cartão ou Pix. A cobrança, de qualquer forma, só acontece depois dos 7 dias, e só se você não cancelar antes.',
   },
   {
     p: 'Meus dados estão seguros?',
@@ -91,8 +91,8 @@ export default function LandingPage({ aoComecar, aoJaTenhoConta }: Props) {
           </p>
           <button className="primario grande landing-cta" onClick={aoComecar}>Começar 7 dias grátis</button>
           <p className="landing-microcopy">
-            Pede o cartão pra ativar o teste, mas você só paga depois de 7 dias — cancele antes
-            disso e não sai nada.
+            Escolha cartão ou Pix pra ativar o teste — você só paga depois de 7 dias, cancele
+            antes disso e não sai nada.
           </p>
         </section>
 
