@@ -22,6 +22,9 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Atrás do Traefik (proxy reverso que termina o TLS): sem isso, req.protocol sempre volta
+// 'http' mesmo em produção (https), quebrando o back_url que mandamos pro Mercado Pago.
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '15mb' })); // fotos comprimidas em base64 passam por aqui
 
 const PORT = process.env.PORT || 8787;
