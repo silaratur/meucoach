@@ -34,7 +34,7 @@ export function infoPreco() {
   return { precoReais: precoReais(), trialDias: trialDias() };
 }
 
-async function obterOuCriarPlano() {
+async function obterOuCriarPlano(backUrl) {
   const configAtual = { precoReais: precoReais(), trialDias: trialDias() };
   if (fs.existsSync(ARQUIVO_PLANO)) {
     const salvo = JSON.parse(fs.readFileSync(ARQUIVO_PLANO, 'utf8'));
@@ -50,6 +50,7 @@ async function obterOuCriarPlano() {
     },
     body: JSON.stringify({
       reason: 'Meu Coach — assinatura mensal',
+      back_url: backUrl,
       auto_recurring: {
         frequency: 1,
         frequency_type: 'months',
@@ -75,7 +76,7 @@ async function obterOuCriarPlano() {
 // existir). Retorna a URL de checkout (init_point) pra onde o cliente deve redirecionar o
 // usuário — lá ele escolhe cartão ou Pix.
 export async function criarAssinatura(perfilId, email, backUrl) {
-  const planoId = await obterOuCriarPlano();
+  const planoId = await obterOuCriarPlano(backUrl);
   const resp = await fetch(`${MP_BASE}/preapproval`, {
     method: 'POST',
     headers: {
