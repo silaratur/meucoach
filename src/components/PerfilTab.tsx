@@ -125,9 +125,14 @@ function AssinaturaCard({ temEmail }: { temEmail: boolean }) {
 export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: Props) {
   const [form, setForm] = useState<Perfil>(perfil);
   const [excluindo, setExcluindo] = useState(false);
+  // Texto do campo de descanso separado do valor numérico salvo: assim dá pra apagar tudo e
+  // digitar de novo sem o campo "saltar" pra um valor padrão a cada tecla apertada — o padrão
+  // só é aplicado quando o campo perde o foco (onBlur), não durante a digitação.
+  const [descansoTexto, setDescansoTexto] = useState(String(perfil.descansoPadraoSeg));
 
   // Se o perfil global mudar (ex.: peso atualizado pela aba Evolução), reflete aqui.
   useEffect(() => setForm(perfil), [perfil]);
+  useEffect(() => setDescansoTexto(String(perfil.descansoPadraoSeg)), [perfil.descansoPadraoSeg]);
 
   function set<K extends keyof Perfil>(campo: K, valor: Perfil[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -253,7 +258,17 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
       />
 
       <label>Descanso padrão entre séries (segundos)</label>
-      <input type="number" value={form.descansoPadraoSeg} onChange={(e) => set('descansoPadraoSeg', +e.target.value || 90)} />
+      <input
+        type="number"
+        value={descansoTexto}
+        onChange={(e) => setDescansoTexto(e.target.value)}
+        onBlur={() => {
+          const n = parseInt(descansoTexto, 10);
+          const valido = Number.isFinite(n) && n > 0 ? n : 90;
+          set('descansoPadraoSeg', valido);
+          setDescansoTexto(String(valido));
+        }}
+      />
 
       <div className="botoes">
         <button className="primario" onClick={salvar}><IconeSalvar size={16} /> Salvar</button>

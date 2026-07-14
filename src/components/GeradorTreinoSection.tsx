@@ -85,6 +85,9 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
   const [local, setLocal] = useState<LocalTreino>('academia');
   const [foco, setFoco] = useState('coach');
   const [duracaoSessao, setDuracaoSessao] = useState(45);
+  // Texto do campo separado do número salvo: permite apagar tudo e digitar de novo sem o
+  // campo saltar pra um valor padrão a cada tecla — o padrão só entra ao perder o foco.
+  const [duracaoTexto, setDuracaoTexto] = useState('45');
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
   const [semanaSelecionada, setSemanaSelecionada] = useState<number | null>(null);
@@ -256,7 +259,17 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
           </div>
           <div>
             <label>Duração da sessão (min)</label>
-            <input type="number" value={duracaoSessao} onChange={(e) => setDuracaoSessao(+e.target.value || 45)} />
+            <input
+              type="number"
+              value={duracaoTexto}
+              onChange={(e) => setDuracaoTexto(e.target.value)}
+              onBlur={() => {
+                const n = parseInt(duracaoTexto, 10);
+                const valido = Number.isFinite(n) && n > 0 ? n : 45;
+                setDuracaoSessao(valido);
+                setDuracaoTexto(String(valido));
+              }}
+            />
           </div>
         </div>
 

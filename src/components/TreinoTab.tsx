@@ -482,6 +482,9 @@ function recalcularGrupos(exs: Exercicio[], ligacoes: boolean[]): Exercicio[] {
 
 function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalvar: (t: Treino) => void; aoCancelar: () => void }) {
   const [t, setT] = useState<Treino>(treino);
+  // Texto do campo separado do número salvo: permite apagar tudo e digitar de novo sem o
+  // campo saltar pra 0 a cada tecla — o valor só é aplicado ao perder o foco.
+  const [aquecimentoTexto, setAquecimentoTexto] = useState(String(treino.aquecimentoMin ?? ''));
 
   function setEx(i: number, campo: keyof Exercicio, valor: string | number) {
     const ex = [...t.exercicios];
@@ -540,8 +543,14 @@ function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalv
           <input
             type="number"
             min={0}
-            value={t.aquecimentoMin ?? 0}
-            onChange={(e) => setT({ ...t, aquecimentoMin: +e.target.value || undefined })}
+            value={aquecimentoTexto}
+            onChange={(e) => setAquecimentoTexto(e.target.value)}
+            onBlur={() => {
+              const n = parseInt(aquecimentoTexto, 10);
+              const valido = Number.isFinite(n) && n >= 0 ? n : undefined;
+              setT({ ...t, aquecimentoMin: valido });
+              setAquecimentoTexto(valido != null ? String(valido) : '');
+            }}
           />
         </div>
         <div>
