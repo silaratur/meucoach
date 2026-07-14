@@ -7,6 +7,7 @@ import { ditadoDisponivel, iniciarDitado } from '../speech';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, totaisDoDia } from '../calc';
 import { OBJETIVOS } from '../types';
 import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha } from './Icones';
+import Markdown from './Markdown';
 import { CalendarDays, RefreshCw, Calculator, Flame, Beef, Wheat, Droplet } from 'lucide-react';
 
 function OBJETIVO_LABEL(v: string): string {
@@ -88,9 +89,10 @@ function TabelaNutricional({
         </tbody>
       </table>
       {analise && (
-        <p className="tabela-nutricional-analise">
-          <IconeCoach size={14} /> {analise}
-        </p>
+        <div className="tabela-nutricional-analise">
+          <IconeCoach size={14} />
+          <Markdown texto={analise} />
+        </div>
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
 import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
+import Markdown from './Markdown';
 import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays } from 'lucide-react';
 
 interface Props {
@@ -487,7 +488,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
         <label><IconeCamera size={14} /> Tire uma foto do visor da balança (leio peso, gordura, massa magra, água, IMC...)</label>
         <MediaPicker tipos={['foto']} aoAdicionar={fotoBalanca} />
         {analisando && <p className="vazio"><IconeCoach size={14} /> Lendo os números da balança...</p>}
-        {leitura && <p className="leitura-balanca">{leitura}</p>}
+        {leitura && <div className="leitura-balanca"><Markdown texto={leitura} /></div>}
         {erro && <p className="erro">{erro}</p>}
 
         <label>Registrar Peso</label>
@@ -547,13 +548,13 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
         <label><IconeSono size={15} /> Sono (foto ou vídeo do wearable)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoSonoRetroativa} />
         {analisandoSono && <p className="vazio"><IconeCoach size={14} /> Analisando o sono...</p>}
-        {resumoSono && <p className="leitura-balanca">{resumoSono}</p>}
+        {resumoSono && <div className="leitura-balanca"><Markdown texto={resumoSono} /></div>}
         {erroSono && <p className="erro">{erroSono}</p>}
 
         <label><IconeCorrida size={15} /> Atividade (foto ou vídeo — passos, tempo ativo, calorias)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoAtividade} />
         {analisandoAtividade && <p className="vazio"><IconeCoach size={14} /> Analisando a atividade...</p>}
-        {resumoAtividadeFoto && <p className="leitura-balanca">{resumoAtividadeFoto}</p>}
+        {resumoAtividadeFoto && <div className="leitura-balanca"><Markdown texto={resumoAtividadeFoto} /></div>}
         {erroAtividade && <p className="erro">{erroAtividade}</p>}
 
         {pontosPassos.length > 0 && (

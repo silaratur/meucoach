@@ -607,10 +607,11 @@ button.destaque {
   gap: 6px;
   align-items: flex-start;
   margin: 6px 2px 0;
-  font-size: 0.85rem;
   color: var(--texto-suave);
-  font-style: italic;
 }
+.tabela-nutricional-analise .markdown { font-size: 0.85rem; }
+.tabela-nutricional-analise .markdown p { margin: 0 0 6px; }
+.tabela-nutricional-analise .markdown p:last-child { margin-bottom: 0; }
 
 /* ---------- Total do dia / meta calórica ---------- */
 .kcal-chip { color: var(--verde-escuro); font-style: normal; font-weight: 600; font-size: 0.82rem; }
@@ -781,6 +782,9 @@ button.destaque {
   padding: 8px 12px;
   font-size: 0.9rem;
 }
+.leitura-balanca .markdown { font-size: 0.9rem; }
+.leitura-balanca .markdown p:first-child { margin-top: 0; }
+.leitura-balanca .markdown p:last-child { margin-bottom: 0; }
 .link-video { display: inline-block; margin: 6px 0; font-size: 0.9rem; color: var(--tom-info-texto); }
 .imagem-exercicio {
   display: block;

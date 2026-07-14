@@ -5,6 +5,7 @@ import { avaliarDia } from '../api';
 import { hojeISO, uid } from '../storage';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from '../calc';
 import { IconeExcluir, IconeCoach, IconeAvaliacao, IconeSono } from './Icones';
+import Markdown from './Markdown';
 import { Flame, Footprints } from 'lucide-react';
 
 function formatarDataLocal(d: Date): string {
@@ -26,23 +27,6 @@ interface Props {
   perfil: Perfil;
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
-}
-
-// Renderização simples do Markdown retornado (negrito, títulos e listas) — números com unidade
-// (kcal, g, h, km, passos...) ganham destaque em cor/negrito para saltar aos olhos no texto corrido.
-function Markdown({ texto }: { texto: string }) {
-  const html = texto
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/(~?\d[\d.,]*\s?(?:kcal|g|h\d{0,2}|km\/h|km|passos?|min)\b|~?\d[\d.,]*\/dia)/g, '<span class="num-destaque">$1</span>')
-    .replace(/^### (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.*)$/gm, '<h3>$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^[-*] (.*)$/gm, '<li>$1</li>')
-    .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, '<ul>$1</ul>')
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br/>');
-  return <div className="markdown" dangerouslySetInnerHTML={{ __html: `<p>${html}</p>` }} />;
 }
 
 // Separa a seção final de ações práticas (ex.: "3 ações para amanhã", com ou sem "#") do resto do
