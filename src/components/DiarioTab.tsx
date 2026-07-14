@@ -318,8 +318,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                 }}
               />
             </div>
+            {/* A foto já analisada aparece dentro da tabela nutricional — some daqui pra não repetir a imagem */}
             <MediaGallery
-              midias={midiasPendentes}
+              midias={macrosPendentes ? midiasPendentes.filter((m) => m.tipo !== 'foto') : midiasPendentes}
               aoRemover={(ref) => {
                 excluirMidias([ref]);
                 setMidiasPendentes((m) => {
@@ -434,18 +435,26 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                     </span>
                     <button className="mini" onClick={() => remover(r.id)}>✕</button>
                   </div>
-                  <MediaGallery midias={r.midias} />
-                  {r.midias?.some((m) => m.tipo === 'foto') && (
-                    <TabelaNutricional
-                      fotoId={r.midias.find((m) => m.tipo === 'foto')?.id}
-                      calorias={r.calorias}
-                      proteinas_g={r.proteinas_g}
-                      carboidratos_g={r.carboidratos_g}
-                      gorduras_g={r.gorduras_g}
-                      fibras_g={r.fibras_g}
-                      analise={r.analiseIA}
-                    />
-                  )}
+                  {(() => {
+                    const temTabela = r.midias?.some((m) => m.tipo === 'foto') && typeof r.calorias === 'number';
+                    return (
+                      <>
+                        {/* Com tabela: a foto já aparece nela — não repete aqui, só mídias que não são foto (vídeo/áudio) */}
+                        <MediaGallery midias={temTabela ? r.midias?.filter((m) => m.tipo !== 'foto') : r.midias} />
+                        {temTabela && (
+                          <TabelaNutricional
+                            fotoId={r.midias!.find((m) => m.tipo === 'foto')?.id}
+                            calorias={r.calorias}
+                            proteinas_g={r.proteinas_g}
+                            carboidratos_g={r.carboidratos_g}
+                            gorduras_g={r.gorduras_g}
+                            fibras_g={r.fibras_g}
+                            analise={r.analiseIA}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
