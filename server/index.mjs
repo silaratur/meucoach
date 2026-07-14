@@ -15,6 +15,7 @@ import {
   cancelarPreapproval,
   consultarPreapproval,
   criarAssinatura,
+  infoPreco,
   statusInterno,
   validarAssinaturaWebhook,
 } from './mercadopago.mjs';
@@ -145,7 +146,7 @@ app.delete('/api/perfil', autenticar, (req, res) => {
 // ---------- Assinatura (Mercado Pago) ----------
 app.get('/api/assinatura', autenticar, (req, res) => {
   const row = db.prepare('SELECT status, valida_ate FROM assinaturas WHERE perfil_id = ?').get(req.perfilId);
-  res.json({ status: row?.status ?? 'inativa', validaAte: row?.valida_ate ?? null });
+  res.json({ status: row?.status ?? 'inativa', validaAte: row?.valida_ate ?? null, ...infoPreco() });
 });
 
 app.post('/api/assinatura/iniciar', autenticar, async (req, res) => {

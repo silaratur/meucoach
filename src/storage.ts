@@ -50,6 +50,8 @@ export async function excluirContaRemota(): Promise<void> {
 export interface StatusAssinatura {
   status: 'inativa' | 'ativa' | 'atrasada' | 'cancelada' | 'isenta';
   validaAte: string | null;
+  precoReais: number;
+  trialDias: number;
 }
 
 export async function obterAssinatura(): Promise<StatusAssinatura> {

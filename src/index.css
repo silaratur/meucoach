@@ -1006,3 +1006,88 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .markdown { font-size: 0.95rem; line-height: 1.5; }
 .markdown h3, .markdown h4 { margin: 12px 0 4px; }
 .markdown ul { margin: 6px 0; padding-left: 20px; }
+
+/* ---------- Landing page de vendas ---------- */
+.landing-conteudo { padding-bottom: 40px; }
+.landing-hero { text-align: center; padding: 28px 4px 8px; }
+.landing-hero h2 {
+  font-size: 1.7rem;
+  line-height: 1.25;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+.landing-subhead {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--texto-suave);
+  margin: 0 0 20px;
+}
+.landing-cta { width: 100%; }
+.landing-microcopy {
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  margin: 10px 0 0;
+}
+.landing-secao {
+  padding: 28px 4px;
+  border-top: 1px solid var(--borda);
+}
+.landing-secao h3 {
+  font-size: 1.25rem;
+  margin: 0 0 12px;
+  text-align: center;
+  text-wrap: balance;
+}
+.landing-secao > p { color: var(--texto-suave); line-height: 1.55; text-align: center; }
+
+.landing-recursos { display: flex; flex-direction: column; gap: 18px; }
+.landing-recurso {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  padding: 16px;
+}
+.landing-recurso svg { color: var(--verde-escuro); margin-bottom: 8px; }
+.landing-recurso strong { display: block; margin-bottom: 4px; }
+.landing-recurso p { margin: 0; font-size: 0.9rem; color: var(--texto-suave); line-height: 1.5; }
+
+.landing-passos { display: flex; flex-direction: column; gap: 16px; }
+.landing-passo { display: flex; gap: 14px; align-items: flex-start; }
+.landing-passo-numero {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--verde);
+  color: #04120a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.landing-passo strong { display: block; }
+.landing-passo p { margin: 2px 0 0; font-size: 0.9rem; color: var(--texto-suave); }
+
+.landing-preco { background: var(--superficie); border-radius: 16px; border-top: none; }
+.landing-confianca {
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.landing-confianca li { display: flex; align-items: center; gap: 8px; font-size: 0.92rem; }
+.landing-confianca svg { color: var(--verde-escuro); flex: 0 0 auto; }
+
+.landing-faq-item {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.landing-faq-item summary { font-weight: 600; cursor: pointer; }
+.landing-faq-item p { margin: 8px 0 0; color: var(--texto-suave); font-size: 0.9rem; line-height: 1.5; }
+
+.landing-cta-final { text-align: center; }

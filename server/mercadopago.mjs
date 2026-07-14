@@ -10,8 +10,16 @@ function precoReais() {
   return Number(process.env.ASSINATURA_PRECO_REAIS || '19.90');
 }
 
+function trialDias() {
+  return Number(process.env.ASSINATURA_TRIAL_DIAS || '7');
+}
+
 export function assinaturaConfigurada() {
   return !!process.env.MERCADOPAGO_ACCESS_TOKEN;
+}
+
+export function infoPreco() {
+  return { precoReais: precoReais(), trialDias: trialDias() };
 }
 
 // Cria uma assinatura "avulsa" (sem plano pré-cadastrado) pro perfil informado. Retorna a URL de
@@ -33,6 +41,7 @@ export async function criarAssinatura(perfilId, email, backUrl) {
         frequency_type: 'months',
         transaction_amount: precoReais(),
         currency_id: 'BRL',
+        free_trial: { frequency: trialDias(), frequency_type: 'days' },
       },
     }),
   });

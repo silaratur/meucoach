@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { DadosPerfil, Perfil } from './types';
 import type { SessaoLogin } from './auth';
-import { definirPerfilAtivo, esquecerNesteAparelho, perfilAtivoId, tokenDe } from './auth';
+import { definirPerfilAtivo, esquecerNesteAparelho, listarSessoes, perfilAtivoId, tokenDe } from './auth';
 import { buscarPerfilEDados, excluirContaRemota, salvarDadosRemoto, salvarPerfilRemoto } from './storage';
 import { aoAssinaturaNecessaria, aoNaoAutorizado, definirToken } from './session';
 import { aplicarTema } from './theme';
 import { IconeCoach, IconeEvolucao, IconeMusculacao, IconePerfil, IconeRefeicao } from './components/Icones';
 import PerfilTab from './components/PerfilTab';
 import LoginTab from './components/LoginTab';
+import LandingPage from './components/LandingPage';
 import DiarioTab from './components/DiarioTab';
 import TreinoTab from './components/TreinoTab';
 import CoachTab from './components/CoachTab';
@@ -24,6 +25,10 @@ export default function App() {
   const [carregando, setCarregando] = useState(false);
   const [erroCarregar, setErroCarregar] = useState('');
   const [avisoAssinatura, setAvisoAssinatura] = useState(false);
+  // Visitante realmente novo (sem sessão salva neste aparelho) vê a landing de vendas antes
+  // do login; quem já tem conta aqui cai direto na tela de "quem vai treinar hoje".
+  const [mostrarLanding, setMostrarLanding] = useState(() => listarSessoes().length === 0);
+  const [modoLoginInicial, setModoLoginInicial] = useState<'lista' | 'entrar' | 'criar' | undefined>(undefined);
   // Conta recém-criada: mostra o assistente de 3 perguntas antes do app normal, em vez de
   // já jogar a pessoa no formulário de perfil completo (~15 campos).
   const [mostrarOnboarding, setMostrarOnboarding] = useState(false);
@@ -126,8 +131,22 @@ export default function App() {
     salvarPerfilRemoto(p).catch((e) => console.error('Falha ao sincronizar perfil:', e));
   }
 
-  // Sem sessão ativa: login / criação de conta
+  // Sem sessão ativa: landing de vendas (só pra visitante novo) depois login / criação de conta
   if (!ativoId || !perfil || !dados) {
+    if (mostrarLanding && !carregando) {
+      return (
+        <LandingPage
+          aoComecar={() => {
+            setMostrarLanding(false);
+            setModoLoginInicial('criar');
+          }}
+          aoJaTenhoConta={() => {
+            setMostrarLanding(false);
+            setModoLoginInicial('entrar');
+          }}
+        />
+      );
+    }
     return (
       <div className="app">
         <header className="topo">
@@ -137,7 +156,7 @@ export default function App() {
         <main className="conteudo">
           {carregando && <p className="vazio">Carregando seus dados...</p>}
           {!carregando && erroCarregar && <p className="erro">{erroCarregar}</p>}
-          {!carregando && <LoginTab aoEntrar={aoEntrar} />}
+          {!carregando && <LoginTab aoEntrar={aoEntrar} modoInicial={modoLoginInicial} />}
         </main>
       </div>
     );

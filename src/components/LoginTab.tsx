@@ -5,13 +5,14 @@ import { IconeAdicionar, IconeChave, IconePerfil } from './Icones';
 
 interface Props {
   aoEntrar: (s: SessaoLogin, novaConta?: boolean) => void;
+  modoInicial?: Modo;
 }
 
 type Modo = 'lista' | 'entrar' | 'criar';
 
-export default function LoginTab({ aoEntrar }: Props) {
+export default function LoginTab({ aoEntrar, modoInicial }: Props) {
   const sessoes = listarSessoes();
-  const [modo, setModo] = useState<Modo>(sessoes.length ? 'lista' : 'criar');
+  const [modo, setModo] = useState<Modo>(modoInicial ?? (sessoes.length ? 'lista' : 'criar'));
   const [nome, setNome] = useState('');
   const [pin, setPin] = useState('');
   const [carregando, setCarregando] = useState(false);

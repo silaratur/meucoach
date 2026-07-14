@@ -103,8 +103,12 @@ function AssinaturaCard({ temEmail }: { temEmail: boolean }) {
             <>
               {!temEmail && <p className="erro">Preencha e salve seu e-mail acima antes de assinar.</p>}
               <button className="primario" onClick={assinar} disabled={processando || !temEmail}>
-                {processando ? 'Abrindo checkout...' : 'Assinar (mensal)'}
+                {processando ? 'Abrindo checkout...' : `Começar ${status.trialDias} dias grátis`}
               </button>
+              <p className="meta-texto">
+                {status.trialDias} dias grátis, depois R$ {status.precoReais.toFixed(2).replace('.', ',')}/mês.
+                Cancele quando quiser antes do fim do teste e não paga nada.
+              </p>
             </>
           )}
           {status.status === 'atrasada' && (
