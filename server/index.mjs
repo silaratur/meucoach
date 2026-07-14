@@ -10,20 +10,11 @@ import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
 import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, totaisDoDia } from './calc.mjs';
 import { buscarMusculoExercicio } from './wger.mjs';
-import {
-  assinaturaConfigurada,
-  cancelarPreapproval,
-  consultarPreapproval,
-  criarAssinatura,
-  infoPreco,
-  statusInterno,
-  validarAssinaturaWebhook,
-} from './mercadopago.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 // Atrás do Traefik (proxy reverso que termina o TLS): sem isso, req.protocol sempre volta
-// 'http' mesmo em produção (https), quebrando o back_url que mandamos pro Mercado Pago.
+// 'http' mesmo em produção (https).
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '15mb' })); // fotos comprimidas em base64 passam por aqui
 
@@ -95,23 +86,6 @@ function autenticar(req, res, next) {
   }
 }
 
-// Bloqueia rotas que custam crédito de IA quando não há assinatura ativa. Se o Mercado Pago não
-// estiver configurado neste servidor (dev/local, sem MERCADOPAGO_ACCESS_TOKEN), deixa passar tudo
-// — mesmo padrão do GEMINI_API_KEY opcional, pra não travar o desenvolvimento local.
-const DIAS_TOLERANCIA_ATRASO = 3;
-
-function exigirAssinaturaAtiva(req, res, next) {
-  if (!assinaturaConfigurada()) return next();
-  const row = db.prepare('SELECT status, valida_ate FROM assinaturas WHERE perfil_id = ?').get(req.perfilId);
-  const status = row?.status ?? 'inativa';
-  if (status === 'ativa' || status === 'isenta') return next();
-  if (status === 'atrasada' && row.valida_ate) {
-    const limite = new Date(row.valida_ate).getTime() + DIAS_TOLERANCIA_ATRASO * 24 * 60 * 60 * 1000;
-    if (Date.now() <= limite) return next();
-  }
-  res.status(402).json({ error: 'Assinatura necessária para usar essa função. Veja em Perfil > Assinatura.' });
-}
-
 // ---------- Perfil e dados (protegidos) ----------
 app.get('/api/perfil', autenticar, (req, res) => {
   const row = db.prepare('SELECT perfil_json, dados_json FROM perfis WHERE id = ?').get(req.perfilId);
@@ -144,78 +118,6 @@ app.delete('/api/perfil', autenticar, (req, res) => {
   db.prepare('DELETE FROM midias WHERE perfil_id = ?').run(req.perfilId);
   db.prepare('DELETE FROM perfis WHERE id = ?').run(req.perfilId);
   res.json({ ok: true });
-});
-
-// ---------- Assinatura (Mercado Pago) ----------
-app.get('/api/assinatura', autenticar, (req, res) => {
-  const row = db.prepare('SELECT status, valida_ate FROM assinaturas WHERE perfil_id = ?').get(req.perfilId);
-  res.json({ status: row?.status ?? 'inativa', validaAte: row?.valida_ate ?? null, ...infoPreco() });
-});
-
-app.post('/api/assinatura/iniciar', autenticar, async (req, res) => {
-  if (!assinaturaConfigurada()) return res.status(503).json({ error: 'Assinatura não configurada neste servidor.' });
-  const row = db.prepare('SELECT perfil_json FROM perfis WHERE id = ?').get(req.perfilId);
-  if (!row) return res.status(404).json({ error: 'Conta não encontrada.' });
-  const perfil = JSON.parse(row.perfil_json);
-  if (!perfil.email) return res.status(400).json({ error: 'Informe seu e-mail no Perfil antes de assinar.' });
-  try {
-    const backUrl = `${req.protocol}://${req.get('host')}/?assinatura=retorno`;
-    const { initPoint, preapprovalId } = await criarAssinatura(req.perfilId, perfil.email, backUrl);
-    const agora = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO assinaturas (perfil_id, status, mp_preapproval_id, mp_payer_email, atualizado_em)
-       VALUES (?, 'inativa', ?, ?, ?)
-       ON CONFLICT(perfil_id) DO UPDATE SET mp_preapproval_id = excluded.mp_preapproval_id, mp_payer_email = excluded.mp_payer_email, atualizado_em = excluded.atualizado_em`,
-    ).run(req.perfilId, preapprovalId, perfil.email, agora);
-    res.json({ initPoint });
-  } catch (e) {
-    res.status(502).json({ error: 'Falha ao criar assinatura: ' + e.message });
-  }
-});
-
-app.post('/api/assinatura/cancelar', autenticar, async (req, res) => {
-  const row = db.prepare('SELECT mp_preapproval_id FROM assinaturas WHERE perfil_id = ?').get(req.perfilId);
-  if (!row?.mp_preapproval_id) return res.status(404).json({ error: 'Nenhuma assinatura encontrada.' });
-  try {
-    await cancelarPreapproval(row.mp_preapproval_id);
-    db.prepare("UPDATE assinaturas SET status = 'cancelada', atualizado_em = ? WHERE perfil_id = ?").run(
-      new Date().toISOString(),
-      req.perfilId,
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(502).json({ error: 'Falha ao cancelar assinatura: ' + e.message });
-  }
-});
-
-// SEM `autenticar`: quem chama é o Mercado Pago, não o usuário — a autenticidade vem da
-// validação HMAC do header x-signature (validarAssinaturaWebhook), não de um token de sessão.
-app.post('/api/mercadopago/webhook', async (req, res) => {
-  if (!validarAssinaturaWebhook(req)) return res.status(401).end();
-  const preapprovalId = req.body?.data?.id || req.query['data.id'];
-  if (!preapprovalId) return res.status(200).end(); // notificação de outro tipo de evento, ignora
-  try {
-    const info = await consultarPreapproval(preapprovalId);
-    const perfilId = info.external_reference;
-    if (perfilId) {
-      db.prepare(
-        `INSERT INTO assinaturas (perfil_id, status, valida_ate, mp_preapproval_id, mp_payer_email, atualizado_em)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(perfil_id) DO UPDATE SET status = excluded.status, valida_ate = excluded.valida_ate,
-           mp_preapproval_id = excluded.mp_preapproval_id, atualizado_em = excluded.atualizado_em`,
-      ).run(
-        perfilId,
-        statusInterno(info.status),
-        info.next_payment_date ?? null,
-        preapprovalId,
-        info.payer_email ?? null,
-        new Date().toISOString(),
-      );
-    }
-  } catch (e) {
-    console.error('Erro ao processar webhook do Mercado Pago:', e);
-  }
-  res.status(200).end();
 });
 
 // ---------- Mídias (fotos, vídeos, áudios) ----------
@@ -276,7 +178,7 @@ async function gerarImagemExercicio(nomeExercicio) {
   return { mime: previsao.mimeType || 'image/png', dados: Buffer.from(previsao.bytesBase64Encoded, 'base64') };
 }
 
-app.get('/api/exercicio-imagem', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.get('/api/exercicio-imagem', autenticar, async (req, res) => {
   const nomeOriginal = String(req.query.nome || '').trim();
   if (!nomeOriginal) return res.status(400).json({ error: 'Nome do exercício obrigatório.' });
   const chave = normalizarNomeExercicio(nomeOriginal);
@@ -450,7 +352,7 @@ ${
 Estruture a resposta em Markdown com as seções: **Resumo do dia**, **Alimentação** (o que foi bem, o que faltou considerando o objetivo), **Treino/Atividade**, e **3 ações para amanhã**. Seja específico com o que a pessoa registrou — cite os alimentos e exercícios pelo nome. Se houver dados de sono/passos, considere-os: pouco sono pede volume de treino mais leve e reforça a importância de recuperação; poucos passos no dia pode sugerir incluir uma caminhada. Se houver déficit ou excesso calórico relevante, ou falta/excesso de atividade, deixe isso explícito e quantificado no resumo — esse texto pode ser reaproveitado como entrada para o planejamento do dia seguinte.`;
 }
 
-app.post('/api/ai/avaliar', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/avaliar', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const user = montarPromptAvaliacao(req.body ?? {});
@@ -496,7 +398,7 @@ function textoAtividadeRecente(atividadeRecente) {
   return JSON.stringify(atividadeRecente, null, 2);
 }
 
-app.post('/api/ai/refeicoes', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/refeicoes', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, tipoRefeicao, registrosDoDia, atividadeRecente } = req.body;
@@ -554,7 +456,7 @@ const SCHEMA_TREINO = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/treino', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/treino', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, local, foco, duracaoMin, historico, sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, avaliacaoRecente, atividadeRecente } = req.body;
@@ -629,7 +531,7 @@ const SCHEMA_SUBSTITUTO = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/trocar-exercicio', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/trocar-exercicio', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, exercicio, local } = req.body;
@@ -701,7 +603,7 @@ const SCHEMA_PLANO_MENSAL = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/plano', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/plano', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, local, duracaoMin, historico, sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, foco, avaliacaoRecente, atividadeRecente } = req.body;
@@ -823,7 +725,7 @@ const SCHEMA_CORRIDA = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/corrida', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/corrida', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, nivelCorrida, objetivoCorrida, diasCorrida, capacidadeAtual, observacoes, corridasRecentes, musculacao } = req.body;
@@ -889,7 +791,7 @@ const SCHEMA_CALORIAS = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/calorias', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/calorias', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, registros } = req.body;
@@ -931,7 +833,7 @@ const SCHEMA_BALANCA = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/balanca', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/balanca', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, imagemBase64, mediaType } = req.body;
@@ -976,7 +878,7 @@ const SCHEMA_FOTO = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/foto', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/foto', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, imagemBase64, mediaType, tipoRefeicao } = req.body;
@@ -1034,7 +936,7 @@ const SCHEMA_SONO = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/sono', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/sono', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, imagemBase64, mediaType } = req.body;
@@ -1083,7 +985,7 @@ const SCHEMA_ATIVIDADE_FOTO = {
   additionalProperties: false,
 };
 
-app.post('/api/ai/atividade-foto', autenticar, exigirAssinaturaAtiva, async (req, res) => {
+app.post('/api/ai/atividade-foto', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
     const { perfil, imagemBase64, mediaType } = req.body;

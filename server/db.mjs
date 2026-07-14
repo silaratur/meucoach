@@ -54,10 +54,9 @@ CREATE TABLE IF NOT EXISTS musculo_exercicio (
   encontrado_em TEXT NOT NULL
 );
 
--- Assinatura mensal (Mercado Pago) — status de cobrança de cada perfil. Fica em tabela própria,
--- NUNCA dentro de perfil_json: o endpoint PUT /api/perfil sobrescreve perfil_json inteiro com o
--- que o cliente mandar, então se o status de assinatura morasse ali o próprio usuário poderia se
--- auto-liberar editando o perfil no DevTools.
+-- Tabela órfã: era o status da assinatura mensal via Mercado Pago (removida — o app voltou a
+-- ser gratuito, com doação Pix opcional em vez de cobrança automática). Mantida só porque já
+-- tem dado real de teste em produção; não é lida nem escrita por nenhum código atual.
 CREATE TABLE IF NOT EXISTS assinaturas (
   perfil_id TEXT PRIMARY KEY,
   status TEXT NOT NULL DEFAULT 'inativa',

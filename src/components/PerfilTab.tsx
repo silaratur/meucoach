@@ -3,10 +3,8 @@ import type { Perfil } from '../types';
 import { OBJETIVOS, SUPLEMENTOS_COMUNS } from '../types';
 import { idadeDe } from '../calc';
 import { aplicarTema } from '../theme';
-import { cancelarAssinatura, iniciarAssinatura, obterAssinatura } from '../storage';
-import type { StatusAssinatura } from '../storage';
 import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
-import { Moon, Sun, LogOut, CreditCard } from 'lucide-react';
+import { Moon, Sun, LogOut, Heart, Copy, Check } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -15,113 +13,44 @@ interface Props {
   aoExcluirConta: () => Promise<void> | void;
 }
 
-const ROTULOS_STATUS_ASSINATURA: Record<StatusAssinatura['status'], string> = {
-  ativa: 'Ativa',
-  isenta: 'Cortesia',
-  atrasada: 'Pagamento atrasado',
-  cancelada: 'Cancelada',
-  inativa: 'Sem assinatura',
-};
+// Doação opcional via Pix pro desenvolvedor — o app é gratuito, mas as chamadas de IA (foto de
+// refeição, geração de treino, coach) têm custo real. Sem checkout, sem cobrança automática:
+// só a chave exibida pra quem quiser ajudar, do próprio banco.
+const PIX_CHAVE = '02563586720';
+const PIX_CHAVE_FORMATADA = '025.635.867-20';
+const PIX_NOME = 'Marcelo V Silveira';
 
-// Status e ações da assinatura mensal (Mercado Pago) — independente do form de Perfil acima
-// (não faz parte do objeto Perfil por design: o status nunca deve ser algo que o cliente
-// possa reescrever via "Salvar perfil", só o servidor decide isso via webhook do Mercado Pago).
-function AssinaturaCard({ temEmail }: { temEmail: boolean }) {
-  const [status, setStatus] = useState<StatusAssinatura | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [processando, setProcessando] = useState(false);
-  const [erro, setErro] = useState('');
+function ApoioCard() {
+  const [copiado, setCopiado] = useState(false);
 
-  function carregar() {
-    obterAssinatura()
-      .then(setStatus)
-      .catch((e) => setErro((e as Error).message))
-      .finally(() => setCarregando(false));
-  }
-
-  useEffect(() => {
-    carregar();
-    // Voltando do checkout do Mercado Pago: o webhook pode levar alguns segundos pra chegar —
-    // reconsulta o status algumas vezes antes de desistir, em vez de deixar a tela parada.
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('assinatura') === 'retorno') {
-      window.history.replaceState({}, '', window.location.pathname);
-      let tentativas = 0;
-      const intervalo = setInterval(() => {
-        tentativas++;
-        carregar();
-        if (tentativas >= 5) clearInterval(intervalo);
-      }, 3000);
-      return () => clearInterval(intervalo);
-    }
-  }, []);
-
-  async function assinar() {
-    setErro('');
-    setProcessando(true);
+  async function copiarChave() {
     try {
-      const { initPoint } = await iniciarAssinatura();
-      window.location.href = initPoint;
-    } catch (e) {
-      setErro((e as Error).message);
-      setProcessando(false);
-    }
-  }
-
-  async function cancelar() {
-    if (
-      !confirm(
-        'Cancelar sua assinatura? Você perde acesso às funções de IA (foto de refeição, geração de treino, coach) ao final do período já pago.',
-      )
-    )
-      return;
-    setErro('');
-    setProcessando(true);
-    try {
-      await cancelarAssinatura();
-      carregar();
-    } catch (e) {
-      setErro((e as Error).message);
-    } finally {
-      setProcessando(false);
+      await navigator.clipboard.writeText(PIX_CHAVE);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // clipboard indisponível (ex.: sem HTTPS/permissão) — a chave já está visível na tela.
     }
   }
 
   return (
     <div className="cartao">
-      <h2><CreditCard size={19} /> Assinatura</h2>
-      {carregando && <p className="vazio">Carregando...</p>}
-      {!carregando && status && (
-        <>
-          <p>
-            Status: <strong>{ROTULOS_STATUS_ASSINATURA[status.status]}</strong>
-            {status.validaAte && (status.status === 'ativa' || status.status === 'atrasada') && (
-              <> — próxima cobrança em {new Date(status.validaAte).toLocaleDateString('pt-BR')}</>
-            )}
-          </p>
-          {(status.status === 'inativa' || status.status === 'cancelada') && (
-            <>
-              {!temEmail && <p className="erro">Preencha e salve seu e-mail acima antes de assinar.</p>}
-              <button className="primario" onClick={assinar} disabled={processando || !temEmail}>
-                {processando ? 'Abrindo checkout...' : `Começar ${status.trialDias} dias grátis`}
-              </button>
-              <p className="meta-texto">
-                {status.trialDias} dias grátis, depois R$ {status.precoReais.toFixed(2).replace('.', ',')}/mês.
-                Cancele quando quiser antes do fim do teste e não paga nada.
-              </p>
-            </>
-          )}
-          {status.status === 'atrasada' && (
-            <p className="erro">Pagamento pendente — regularize pelo Mercado Pago pra não perder o acesso.</p>
-          )}
-          {status.status === 'ativa' && (
-            <button className="secundario" onClick={cancelar} disabled={processando}>
-              {processando ? 'Cancelando...' : 'Cancelar assinatura'}
-            </button>
-          )}
-        </>
-      )}
-      {erro && <p className="erro">{erro}</p>}
+      <h2><Heart size={19} /> Apoie o desenvolvedor</h2>
+      <p>
+        O Meu Coach é gratuito. As análises de IA (foto de refeição, geração de treino, coach)
+        têm custo real pra manter no ar — se o app te ajuda, uma doação via Pix é bem-vinda,
+        mas nunca obrigatória.
+      </p>
+      <div className="apoio-pix">
+        <div>
+          <label>Chave Pix (CPF)</label>
+          <strong>{PIX_CHAVE_FORMATADA}</strong>
+          <small>{PIX_NOME}</small>
+        </div>
+        <button type="button" className="secundario" onClick={copiarChave}>
+          {copiado ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar chave</>}
+        </button>
+      </div>
     </div>
   );
 }
@@ -191,14 +120,6 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
 
       <label>Nome</label>
       <input value={form.nome} onChange={(e) => set('nome', e.target.value)} placeholder="Como te chamo?" />
-
-      <label>E-mail (usado só pra assinatura)</label>
-      <input
-        type="email"
-        value={form.email ?? ''}
-        onChange={(e) => set('email', e.target.value || undefined)}
-        placeholder="seu@email.com"
-      />
 
       <div className="linha">
         <div>
@@ -299,7 +220,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
         </button>
       </div>
     </div>
-    <AssinaturaCard temEmail={!!perfil.email} />
+    <ApoioCard />
     </>
   );
 }

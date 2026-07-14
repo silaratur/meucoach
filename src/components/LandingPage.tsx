@@ -2,7 +2,8 @@
 // só aparece quando não há sessão salva neste aparelho). Sem depoimentos de clientes por
 // decisão explícita: hoje o app tem poucos usuários reais engajados, e atribuir citação a
 // alguém que não existe (ou que não autorizou) é falso e ilegal em publicidade — a página
-// usa bullets de confiança (garantias, política de cancelamento) no lugar disso.
+// usa bullets de confiança no lugar disso. O app é gratuito (sem checkout/cobrança) — quem
+// quiser pode apoiar com uma doação Pix opcional, configurada no Perfil.
 import { IconeRefeicao, IconeMusculacao, IconeEvolucao, IconeCoach, IconeConcluido } from './Icones';
 
 interface Props {
@@ -40,8 +41,8 @@ const PASSOS = [
 ];
 
 const CONFIANCA = [
-  '7 dias completos pra testar sem gastar nada',
-  'Cancele quando quiser, direto pelo app',
+  'Totalmente gratuito, sem cartão e sem cobrança',
+  'Cancele sua conta quando quiser, direto pelo app',
   'Seus dados são só seus — protegidos e nunca compartilhados',
   'Suporte e Coach 100% em português',
 ];
@@ -56,16 +57,12 @@ const FAQ = [
     r: 'Funciona em casa, na rua ou na academia — você escolhe onde e o Coach adapta o treino ao que você tem disponível.',
   },
   {
-    p: 'Como cancelo?',
+    p: 'O app é realmente gratuito?',
+    r: 'Sim, sem pegadinha — não pede cartão nem cobra nada. Se quiser ajudar a manter as análises de IA no ar, tem uma doação Pix opcional lá no Perfil.',
+  },
+  {
+    p: 'Como excluo minha conta?',
     r: 'Direto no seu Perfil, dentro do app, a qualquer momento — sem precisar ligar pra ninguém.',
-  },
-  {
-    p: 'Quando começo a pagar?',
-    r: 'Só depois dos 7 dias grátis. Cancelando antes do fim do teste, você não paga nada.',
-  },
-  {
-    p: 'Preciso informar cartão pra começar?',
-    r: 'Sim, o Mercado Pago exige o cartão pra ativar o período de teste — mas a cobrança só acontece depois dos 7 dias, e só se você não cancelar antes.',
   },
   {
     p: 'Meus dados estão seguros?',
@@ -87,12 +84,11 @@ export default function LandingPage({ aoComecar, aoJaTenhoConta }: Props) {
           <p className="landing-subhead">
             Fotografe sua refeição e receba a análise na hora. Diga o que tem em casa ou na
             academia e receba o treino do dia. Um Coach que acompanha sua evolução de verdade —
-            todos os dias, sem mensalidade de academia boutique nem preço de personal particular.
+            todos os dias, de graça.
           </p>
-          <button className="primario grande landing-cta" onClick={aoComecar}>Começar 7 dias grátis</button>
+          <button className="primario grande landing-cta" onClick={aoComecar}>Começar agora, é grátis</button>
           <p className="landing-microcopy">
-            Pede o cartão pra ativar o teste, mas você só paga depois de 7 dias — cancele antes
-            disso e não sai nada.
+            Sem cartão, sem cobrança — só nome e PIN pra começar.
           </p>
         </section>
 
@@ -134,13 +130,13 @@ export default function LandingPage({ aoComecar, aoJaTenhoConta }: Props) {
         </section>
 
         <section className="landing-secao landing-preco">
-          <h3>7 dias grátis. Sem letra miúda.</h3>
+          <h3>Grátis. Sem letra miúda.</h3>
           <ul className="landing-confianca">
             {CONFIANCA.map((c) => (
               <li key={c}><IconeConcluido size={16} /> {c}</li>
             ))}
           </ul>
-          <button className="primario grande landing-cta" onClick={aoComecar}>Começar 7 dias grátis</button>
+          <button className="primario grande landing-cta" onClick={aoComecar}>Começar agora, é grátis</button>
         </section>
 
         <section className="landing-secao">
@@ -155,7 +151,7 @@ export default function LandingPage({ aoComecar, aoJaTenhoConta }: Props) {
 
         <section className="landing-secao landing-cta-final">
           <h3>Seu próximo treino pode começar agora</h3>
-          <button className="primario grande landing-cta" onClick={aoComecar}>Começar 7 dias grátis</button>
+          <button className="primario grande landing-cta" onClick={aoComecar}>Começar agora, é grátis</button>
         </section>
       </main>
     </div>

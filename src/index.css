@@ -1007,6 +1007,22 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .markdown h3, .markdown h4 { margin: 12px 0 4px; }
 .markdown ul { margin: 6px 0; padding-left: 20px; }
 
+/* ---------- Doação Pix (Perfil) ---------- */
+.apoio-pix {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+.apoio-pix label { display: block; font-size: 0.78rem; color: var(--texto-suave); margin: 0; }
+.apoio-pix strong { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.apoio-pix small { display: block; color: var(--texto-suave); }
+
 /* ---------- Landing page de vendas ---------- */
 .landing-conteudo { padding-bottom: 40px; }
 .landing-hero { text-align: center; padding: 28px 4px 8px; }

@@ -1,5 +1,5 @@
 import type { DiaAlimentar, DiaTreinoPlano, Exercicio, Perfil, Pesagem, Registro, SugestaoRefeicao, Treino } from './types';
-import { cabecalhos, notificarAssinaturaNecessaria, notificarNaoAutorizado } from './session';
+import { cabecalhos, notificarNaoAutorizado } from './session';
 
 async function post<T>(url: string, body: unknown): Promise<T> {
   const resp = await fetch(url, {
@@ -9,7 +9,6 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   });
   const data = await resp.json().catch(() => ({}));
   if (resp.status === 401) notificarNaoAutorizado();
-  if (resp.status === 402) notificarAssinaturaNecessaria();
   if (!resp.ok) throw new Error((data as { error?: string }).error || `Erro ${resp.status}`);
   return data as T;
 }

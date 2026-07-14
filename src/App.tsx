@@ -3,7 +3,7 @@ import type { DadosPerfil, Perfil } from './types';
 import type { SessaoLogin } from './auth';
 import { definirPerfilAtivo, esquecerNesteAparelho, listarSessoes, perfilAtivoId, tokenDe } from './auth';
 import { buscarPerfilEDados, excluirContaRemota, salvarDadosRemoto, salvarPerfilRemoto } from './storage';
-import { aoAssinaturaNecessaria, aoNaoAutorizado, definirToken } from './session';
+import { aoNaoAutorizado, definirToken } from './session';
 import { aplicarTema } from './theme';
 import { IconeCoach, IconeEvolucao, IconeMusculacao, IconePerfil, IconeRefeicao } from './components/Icones';
 import PerfilTab from './components/PerfilTab';
@@ -24,7 +24,6 @@ export default function App() {
   const [dados, setDados] = useState<DadosPerfil | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erroCarregar, setErroCarregar] = useState('');
-  const [avisoAssinatura, setAvisoAssinatura] = useState(false);
   // Visitante realmente novo (sem sessão salva neste aparelho) vê a landing de vendas antes
   // do login; quem já tem conta aqui cai direto na tela de "quem vai treinar hoje".
   const [mostrarLanding, setMostrarLanding] = useState(() => listarSessoes().length === 0);
@@ -40,21 +39,6 @@ export default function App() {
       setAtivoId(null);
     });
   }, [ativoId]);
-
-  // Se uma função de IA recusar por falta de assinatura ativa (402), manda pra aba de
-  // Perfil (onde fica o cartão de Assinatura) com um aviso — um único ponto central, em vez
-  // de tratar esse erro repetido em cada tela que chama IA.
-  useEffect(() => {
-    aoAssinaturaNecessaria(() => {
-      setAba('perfil');
-      setAvisoAssinatura(true);
-    });
-  }, []);
-
-  // O aviso só faz sentido na própria visita à aba Perfil que ele disparou — sai daí, some.
-  useEffect(() => {
-    if (aba !== 'perfil') setAvisoAssinatura(false);
-  }, [aba]);
 
   // Sempre que a pessoa ativa muda, busca o perfil e os dados dela no servidor —
   // assim funciona igual em qualquer aparelho.
@@ -192,19 +176,12 @@ export default function App() {
           )}
           {aba === 'coach' && <CoachTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
           {aba === 'perfil' && (
-            <>
-              {avisoAssinatura && (
-                <p className="erro">
-                  Assinatura necessária pra usar essa função de IA. Assine abaixo pra continuar.
-                </p>
-              )}
-              <PerfilTab
-                perfil={perfil}
-                aoSalvar={atualizarPerfil}
-                aoSair={sairDesteAparelho}
-                aoExcluirConta={excluirConta}
-              />
-            </>
+            <PerfilTab
+              perfil={perfil}
+              aoSalvar={atualizarPerfil}
+              aoSair={sairDesteAparelho}
+              aoExcluirConta={excluirConta}
+            />
           )}
         </div>
       </main>
