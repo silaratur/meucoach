@@ -33,6 +33,7 @@ function TabelaNutricional({
   gorduras_g,
   fibras_g,
   analise,
+  aoRemover,
 }: {
   fotoId?: string;
   calorias?: number;
@@ -41,6 +42,7 @@ function TabelaNutricional({
   gorduras_g?: number;
   fibras_g?: number;
   analise?: string;
+  aoRemover?: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -72,6 +74,11 @@ function TabelaNutricional({
               {i === 0 && (
                 <td className="tabela-nutricional-imagem" rowSpan={linhas.length}>
                   {url && <img src={url} alt="Foto da refeição analisada" />}
+                  {aoRemover && (
+                    <button className="mini tabela-nutricional-remover" onClick={aoRemover} title="Remover registro">
+                      ✕
+                    </button>
+                  )}
                 </td>
               )}
               <td>{l.rotulo}</td>
@@ -424,39 +431,46 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
           return (
             <div key={t.value} className="grupo-refeicao">
               <h3><Icone size={16} /> {t.label}</h3>
-              {doTipo.map((r) => (
-                <div key={r.id} className="registro-bloco">
-                  <div className="registro">
-                    <span>
-                      {r.hora} — {r.descricao}
-                      {typeof r.calorias === 'number' && (
-                        <em className="kcal-chip"> ~{Math.round(r.calorias)} kcal</em>
-                      )}
-                    </span>
-                    <button className="mini" onClick={() => remover(r.id)}>✕</button>
-                  </div>
-                  {(() => {
-                    const temTabela = r.midias?.some((m) => m.tipo === 'foto') && typeof r.calorias === 'number';
-                    return (
+              {doTipo.map((r) => {
+                const temTabela = r.midias?.some((m) => m.tipo === 'foto') && typeof r.calorias === 'number';
+                const textoRegistro = (
+                  <span>
+                    {r.hora} — {r.descricao}
+                    {typeof r.calorias === 'number' && (
+                      <em className="kcal-chip"> ~{Math.round(r.calorias)} kcal</em>
+                    )}
+                  </span>
+                );
+                return (
+                  <div key={r.id} className="registro-bloco">
+                    {temTabela ? (
                       <>
-                        {/* Com tabela: a foto já aparece nela — não repete aqui, só mídias que não são foto (vídeo/áudio) */}
-                        <MediaGallery midias={temTabela ? r.midias?.filter((m) => m.tipo !== 'foto') : r.midias} />
-                        {temTabela && (
-                          <TabelaNutricional
-                            fotoId={r.midias!.find((m) => m.tipo === 'foto')?.id}
-                            calorias={r.calorias}
-                            proteinas_g={r.proteinas_g}
-                            carboidratos_g={r.carboidratos_g}
-                            gorduras_g={r.gorduras_g}
-                            fibras_g={r.fibras_g}
-                            analise={r.analiseIA}
-                          />
-                        )}
+                        {/* Tabela primeiro (com a foto e o botão de remover ancorados nela), texto/análise depois — sem duplicar imagem nem sobrepor botão no texto */}
+                        <MediaGallery midias={r.midias?.filter((m) => m.tipo !== 'foto')} />
+                        <TabelaNutricional
+                          fotoId={r.midias!.find((m) => m.tipo === 'foto')?.id}
+                          calorias={r.calorias}
+                          proteinas_g={r.proteinas_g}
+                          carboidratos_g={r.carboidratos_g}
+                          gorduras_g={r.gorduras_g}
+                          fibras_g={r.fibras_g}
+                          analise={r.analiseIA}
+                          aoRemover={() => remover(r.id)}
+                        />
+                        <p className="registro-texto">{textoRegistro}</p>
                       </>
-                    );
-                  })()}
-                </div>
-              ))}
+                    ) : (
+                      <>
+                        <div className="registro">
+                          {textoRegistro}
+                          <button className="mini" onClick={() => remover(r.id)}>✕</button>
+                        </div>
+                        <MediaGallery midias={r.midias} />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
