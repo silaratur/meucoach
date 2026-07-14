@@ -1,7 +1,7 @@
 // Armazenamento de mídias (fotos, vídeos e áudios) no servidor — assim elas
 // aparecem em qualquer aparelho, não só no navegador onde foram enviadas.
 
-import { cabecalhos, notificarNaoAutorizado } from './session';
+import { cabecalhos, notificarAssinaturaNecessaria, notificarNaoAutorizado } from './session';
 
 export type TipoMidia = 'foto' | 'video' | 'audio';
 
@@ -53,6 +53,7 @@ export async function urlImagemExercicio(nomeExercicio: string): Promise<string 
   if (urlImagemExercicioCache.has(nomeExercicio)) return urlImagemExercicioCache.get(nomeExercicio)!;
   const resp = await fetch(`/api/exercicio-imagem?nome=${encodeURIComponent(nomeExercicio)}`, { headers: cabecalhos() });
   if (resp.status === 401) notificarNaoAutorizado();
+  if (resp.status === 402) notificarAssinaturaNecessaria();
   if (!resp.ok) return null;
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);

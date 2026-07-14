@@ -3,7 +3,7 @@ import type { DadosPerfil, Perfil } from './types';
 import type { SessaoLogin } from './auth';
 import { definirPerfilAtivo, esquecerNesteAparelho, perfilAtivoId, tokenDe } from './auth';
 import { buscarPerfilEDados, excluirContaRemota, salvarDadosRemoto, salvarPerfilRemoto } from './storage';
-import { aoNaoAutorizado, definirToken } from './session';
+import { aoAssinaturaNecessaria, aoNaoAutorizado, definirToken } from './session';
 import { aplicarTema } from './theme';
 import { IconeCoach, IconeEvolucao, IconeMusculacao, IconePerfil, IconeRefeicao } from './components/Icones';
 import PerfilTab from './components/PerfilTab';
@@ -23,6 +23,7 @@ export default function App() {
   const [dados, setDados] = useState<DadosPerfil | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erroCarregar, setErroCarregar] = useState('');
+  const [avisoAssinatura, setAvisoAssinatura] = useState(false);
   // Conta recém-criada: mostra o assistente de 3 perguntas antes do app normal, em vez de
   // já jogar a pessoa no formulário de perfil completo (~15 campos).
   const [mostrarOnboarding, setMostrarOnboarding] = useState(false);
@@ -34,6 +35,21 @@ export default function App() {
       setAtivoId(null);
     });
   }, [ativoId]);
+
+  // Se uma função de IA recusar por falta de assinatura ativa (402), manda pra aba de
+  // Perfil (onde fica o cartão de Assinatura) com um aviso — um único ponto central, em vez
+  // de tratar esse erro repetido em cada tela que chama IA.
+  useEffect(() => {
+    aoAssinaturaNecessaria(() => {
+      setAba('perfil');
+      setAvisoAssinatura(true);
+    });
+  }, []);
+
+  // O aviso só faz sentido na própria visita à aba Perfil que ele disparou — sai daí, some.
+  useEffect(() => {
+    if (aba !== 'perfil') setAvisoAssinatura(false);
+  }, [aba]);
 
   // Sempre que a pessoa ativa muda, busca o perfil e os dados dela no servidor —
   // assim funciona igual em qualquer aparelho.
@@ -157,12 +173,19 @@ export default function App() {
           )}
           {aba === 'coach' && <CoachTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
           {aba === 'perfil' && (
-            <PerfilTab
-              perfil={perfil}
-              aoSalvar={atualizarPerfil}
-              aoSair={sairDesteAparelho}
-              aoExcluirConta={excluirConta}
-            />
+            <>
+              {avisoAssinatura && (
+                <p className="erro">
+                  Assinatura necessária pra usar essa função de IA. Assine abaixo pra continuar.
+                </p>
+              )}
+              <PerfilTab
+                perfil={perfil}
+                aoSalvar={atualizarPerfil}
+                aoSair={sairDesteAparelho}
+                aoExcluirConta={excluirConta}
+              />
+            </>
           )}
         </div>
       </main>

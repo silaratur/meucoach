@@ -60,6 +60,7 @@ export const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'S
 export interface Perfil {
   id: string;
   nome: string;
+  email?: string; // usado só pra assinatura (Mercado Pago exige e-mail do pagador)
   sexo?: 'M' | 'F';
   nascimento?: string; // "yyyy-MM-dd"
   idade?: number; // calculada a partir do nascimento (mantida para a IA)

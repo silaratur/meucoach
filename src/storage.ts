@@ -1,5 +1,5 @@
 import type { DadosPerfil, Perfil, SessaoTreino } from './types';
-import { cabecalhos, notificarNaoAutorizado } from './session';
+import { cabecalhos, notificarAssinaturaNecessaria, notificarNaoAutorizado } from './session';
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -25,6 +25,7 @@ async function chamar<T>(url: string, opcoes: RequestInit = {}): Promise<T> {
   });
   const data = await resp.json().catch(() => ({}));
   if (resp.status === 401) notificarNaoAutorizado();
+  if (resp.status === 402) notificarAssinaturaNecessaria();
   if (!resp.ok) throw new Error((data as { error?: string }).error || `Erro ${resp.status}`);
   return data as T;
 }
@@ -43,6 +44,24 @@ export async function salvarDadosRemoto(dados: DadosPerfil): Promise<void> {
 
 export async function excluirContaRemota(): Promise<void> {
   await chamar('/api/perfil', { method: 'DELETE' });
+}
+
+// ---------- Assinatura (Mercado Pago) ----------
+export interface StatusAssinatura {
+  status: 'inativa' | 'ativa' | 'atrasada' | 'cancelada' | 'isenta';
+  validaAte: string | null;
+}
+
+export async function obterAssinatura(): Promise<StatusAssinatura> {
+  return chamar('/api/assinatura');
+}
+
+export async function iniciarAssinatura(): Promise<{ initPoint: string }> {
+  return chamar('/api/assinatura/iniciar', { method: 'POST' });
+}
+
+export async function cancelarAssinatura(): Promise<void> {
+  await chamar('/api/assinatura/cancelar', { method: 'POST' });
 }
 
 // ---------- Recomendação de carga ----------

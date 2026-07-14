@@ -53,6 +53,20 @@ CREATE TABLE IF NOT EXISTS musculo_exercicio (
   musculo_nome TEXT,
   encontrado_em TEXT NOT NULL
 );
+
+-- Assinatura mensal (Mercado Pago) — status de cobrança de cada perfil. Fica em tabela própria,
+-- NUNCA dentro de perfil_json: o endpoint PUT /api/perfil sobrescreve perfil_json inteiro com o
+-- que o cliente mandar, então se o status de assinatura morasse ali o próprio usuário poderia se
+-- auto-liberar editando o perfil no DevTools.
+CREATE TABLE IF NOT EXISTS assinaturas (
+  perfil_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'inativa',
+  valida_ate TEXT,
+  mp_preapproval_id TEXT,
+  mp_payer_email TEXT,
+  atualizado_em TEXT NOT NULL,
+  FOREIGN KEY (perfil_id) REFERENCES perfis(id)
+);
 `);
 
 // Segredo para assinar os tokens de sessão: gerado uma vez e persistido em disco

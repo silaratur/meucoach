@@ -3,6 +3,7 @@
 
 let tokenAtual: string | null = null;
 let aoNaoAutorizadoCb: (() => void) | null = null;
+let aoAssinaturaNecessariaCb: (() => void) | null = null;
 
 export function definirToken(t: string | null) {
   tokenAtual = t;
@@ -19,6 +20,16 @@ export function aoNaoAutorizado(cb: () => void) {
 
 export function notificarNaoAutorizado() {
   aoNaoAutorizadoCb?.();
+}
+
+// App.tsx registra aqui o que fazer quando uma função paga (IA) recusa por falta de
+// assinatura ativa (HTTP 402) — evita repetir esse tratamento em cada tela que chama IA.
+export function aoAssinaturaNecessaria(cb: () => void) {
+  aoAssinaturaNecessariaCb = cb;
+}
+
+export function notificarAssinaturaNecessaria() {
+  aoAssinaturaNecessariaCb?.();
 }
 
 export function cabecalhos(extra?: Record<string, string>): Record<string, string> {
