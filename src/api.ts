@@ -57,6 +57,7 @@ export interface AnaliseFoto {
   proteinas_g: number;
   carboidratos_g: number;
   gorduras_g: number;
+  fibras_g: number;
   comentario: string;
   ehComida: boolean;
 }

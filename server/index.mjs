@@ -862,15 +862,16 @@ ${perfilTexto(perfil)}`,
 const SCHEMA_FOTO = {
   type: 'object',
   properties: {
-    descricao: { type: 'string', description: 'O que aparece no prato, com quantidades aproximadas' },
+    descricao: { type: 'string', description: 'Cada alimento/bebida identificado, com a quantidade/porção estimada' },
     calorias: { type: 'number' },
     proteinas_g: { type: 'number' },
     carboidratos_g: { type: 'number' },
     gorduras_g: { type: 'number' },
-    comentario: { type: 'string', description: 'Avaliação curta da refeição em relação ao objetivo da pessoa' },
+    fibras_g: { type: 'number' },
+    comentario: { type: 'string', description: 'Análise nutricional da refeição: pontos de atenção, o que está bom, relação com o objetivo da pessoa — e qualquer incerteza na estimativa' },
     ehComida: { type: 'boolean', description: 'false se a imagem não parece ser de comida' },
   },
-  required: ['descricao', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'comentario', 'ehComida'],
+  required: ['descricao', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario', 'ehComida'],
   additionalProperties: false,
 };
 
@@ -890,7 +891,15 @@ app.post('/api/ai/foto', autenticar, async (req, res) => {
         },
         {
           type: 'text',
-          text: `Esta é a foto do(a) ${tipoRefeicao || 'refeição'} do aluno. Analise o prato: identifique os alimentos e quantidades aproximadas, estime calorias e macros da porção visível, e comente brevemente se a refeição ajuda no objetivo dele. Se a imagem não for de comida, diga isso em "descricao" e marque ehComida=false.
+          text: `Você é um nutricionista clínico extremamente detalhista, especialista em análise visual de refeições — nunca chuta valores genéricos. Esta é a foto do(a) ${tipoRefeicao || 'refeição'} do aluno.
+
+Analise com atenção aos detalhes:
+1. Identifique CADA alimento e bebida visível no prato, com a porção/quantidade aproximada mais realista possível (não arredonde para números "redondos" sem necessidade).
+2. A partir dos alimentos identificados, calcule a composição nutricional REAL da porção visível: calorias totais, proteína (g), carboidrato (g), gordura (g) e fibras (g). Baseie-se em valores nutricionais reais de cada alimento — some item por item, não invente um total genérico.
+3. Se algum alimento não estiver claramente identificável, diga isso explicitamente no comentário em vez de estimar às cegas.
+4. No comentário, dê uma análise nutricional objetiva da refeição (pontos fortes, pontos de atenção, relação com o objetivo do aluno).
+
+Se a imagem não for de comida, diga isso em "descricao" e marque ehComida=false.
 
 ## Perfil do aluno
 ${perfilTexto(perfil)}`,

@@ -119,6 +119,9 @@ export interface Registro {
   proteinas_g?: number;
   carboidratos_g?: number;
   gorduras_g?: number;
+  fibras_g?: number;
+  // comentário da análise nutricional da IA sobre a foto — só existe quando a origem foi uma foto analisada
+  analiseIA?: string;
 }
 
 export interface DiaAlimentar {

@@ -13,7 +13,7 @@ function OBJETIVO_LABEL(v: string): string {
   return OBJETIVOS.find((o) => o.value === v)?.label.split(' (')[0] ?? v;
 }
 import type { MediaRef } from '../media';
-import { blobParaBase64, excluirMidias, obterMidia } from '../media';
+import { blobParaBase64, excluirMidias, obterMidia, urlMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
 import { IconeAdicionar, IconeConcluido, IconeMicrofone, IconeParar } from './Icones';
 
@@ -21,6 +21,72 @@ interface Props {
   perfil: Perfil;
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
+}
+
+// Tabela de análise nutricional de uma refeição fotografada: imagem | nutriente | valor,
+// com a análise da IA logo abaixo. Só aparece quando há foto E estimativa nutricional.
+function TabelaNutricional({
+  fotoId,
+  calorias,
+  proteinas_g,
+  carboidratos_g,
+  gorduras_g,
+  fibras_g,
+  analise,
+}: {
+  fotoId?: string;
+  calorias?: number;
+  proteinas_g?: number;
+  carboidratos_g?: number;
+  gorduras_g?: number;
+  fibras_g?: number;
+  analise?: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    setUrl(null);
+    if (fotoId) urlMidia(fotoId).then((u) => ativo && setUrl(u));
+    return () => {
+      ativo = false;
+    };
+  }, [fotoId]);
+
+  if (typeof calorias !== 'number') return null;
+
+  const linhas: { rotulo: string; valor: string }[] = [
+    { rotulo: 'Proteína', valor: typeof proteinas_g === 'number' ? `${Math.round(proteinas_g)} g` : '—' },
+    { rotulo: 'Carboidrato', valor: typeof carboidratos_g === 'number' ? `${Math.round(carboidratos_g)} g` : '—' },
+    { rotulo: 'Gordura', valor: typeof gorduras_g === 'number' ? `${Math.round(gorduras_g)} g` : '—' },
+    { rotulo: 'Fibras', valor: typeof fibras_g === 'number' ? `${Math.round(fibras_g)} g` : '—' },
+    { rotulo: 'Total', valor: `${Math.round(calorias)} kcal` },
+  ];
+
+  return (
+    <div className="tabela-nutricional-bloco">
+      <table className="tabela-nutricional">
+        <tbody>
+          {linhas.map((l, i) => (
+            <tr key={l.rotulo}>
+              {i === 0 && (
+                <td className="tabela-nutricional-imagem" rowSpan={linhas.length}>
+                  {url && <img src={url} alt="Foto da refeição analisada" />}
+                </td>
+              )}
+              <td>{l.rotulo}</td>
+              <td>{l.valor}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {analise && (
+        <p className="tabela-nutricional-analise">
+          <IconeCoach size={14} /> {analise}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function DiarioTab({ perfil, dados, atualizar }: Props) {
@@ -39,8 +105,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const [estimando, setEstimando] = useState(false);
   const [macrosPendentes, setMacrosPendentes] = useState<Pick<
     Registro,
-    'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g'
+    'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g' | 'fibras_g'
   > | null>(null);
+  const [analisePendente, setAnalisePendente] = useState('');
   const pararDitadoRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => pararDitadoRef.current?.(), []);
@@ -78,10 +145,12 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
       hora: horaAgora(),
       midias: midiasPendentes.length ? midiasPendentes : undefined,
       ...(macrosPendentes ?? {}),
+      ...(analisePendente ? { analiseIA: analisePendente } : {}),
     });
     setDescricao('');
     setMidiasPendentes([]);
     setMacrosPendentes(null);
+    setAnalisePendente('');
     setEntradaAberta(false);
   }
 
@@ -107,14 +176,18 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
       const a = await analisarFoto(perfil, base64, blob.type || 'image/jpeg', rotulo);
       if (!a.ehComida) {
         setErro(a.descricao);
+        setMacrosPendentes(null);
+        setAnalisePendente('');
       } else {
-        setDescricao(`${a.descricao}\n${a.comentario}`);
+        setDescricao(a.descricao);
         setMacrosPendentes({
           calorias: a.calorias,
           proteinas_g: a.proteinas_g,
           carboidratos_g: a.carboidratos_g,
           gorduras_g: a.gorduras_g,
+          fibras_g: a.fibras_g,
         });
+        setAnalisePendente(a.comentario);
       }
     } catch (e) {
       setErro((e as Error).message);
@@ -249,7 +322,14 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
               midias={midiasPendentes}
               aoRemover={(ref) => {
                 excluirMidias([ref]);
-                setMidiasPendentes((m) => m.filter((x) => x.id !== ref.id));
+                setMidiasPendentes((m) => {
+                  const restante = m.filter((x) => x.id !== ref.id);
+                  if (ref.tipo === 'foto' && !restante.some((x) => x.tipo === 'foto')) {
+                    setMacrosPendentes(null);
+                    setAnalisePendente('');
+                  }
+                  return restante;
+                });
               }}
             />
             {analisando && <p className="leitura-balanca"><IconeCoach size={14} /> Olhando seu prato... a descrição chega em instantes.</p>}
@@ -257,6 +337,17 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
               <button className="destaque" onClick={() => analisarFotoPendente()}>
                 <RefreshCw size={15} /> Analisar a foto de novo
               </button>
+            )}
+            {!analisando && macrosPendentes && (
+              <TabelaNutricional
+                fotoId={midiasPendentes.find((m) => m.tipo === 'foto')?.id}
+                calorias={macrosPendentes.calorias}
+                proteinas_g={macrosPendentes.proteinas_g}
+                carboidratos_g={macrosPendentes.carboidratos_g}
+                gorduras_g={macrosPendentes.gorduras_g}
+                fibras_g={macrosPendentes.fibras_g}
+                analise={analisePendente}
+              />
             )}
 
             <div className="botoes">
@@ -270,6 +361,8 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                   setEntradaAberta(false);
                   setDescricao('');
                   setMidiasPendentes([]);
+                  setMacrosPendentes(null);
+                  setAnalisePendente('');
                 }}
               >
                 Cancelar
@@ -342,6 +435,17 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                     <button className="mini" onClick={() => remover(r.id)}>✕</button>
                   </div>
                   <MediaGallery midias={r.midias} />
+                  {r.midias?.some((m) => m.tipo === 'foto') && (
+                    <TabelaNutricional
+                      fotoId={r.midias.find((m) => m.tipo === 'foto')?.id}
+                      calorias={r.calorias}
+                      proteinas_g={r.proteinas_g}
+                      carboidratos_g={r.carboidratos_g}
+                      gorduras_g={r.gorduras_g}
+                      fibras_g={r.fibras_g}
+                      analise={r.analiseIA}
+                    />
+                  )}
                 </div>
               ))}
             </div>

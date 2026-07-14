@@ -553,6 +553,46 @@ button.destaque {
 .registro-bloco { margin: 4px 0 10px; }
 .registro-bloco .media-galeria { margin: 6px 0 0 6px; }
 
+/* ---------- Tabela de análise nutricional (foto da refeição) ---------- */
+.tabela-nutricional-bloco { margin: 8px 0; }
+.tabela-nutricional {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.88rem;
+}
+.tabela-nutricional td {
+  padding: 6px 10px;
+  border-top: 1px solid var(--borda);
+}
+.tabela-nutricional tr:first-child td { border-top: none; }
+.tabela-nutricional td:nth-child(2) { color: var(--texto-suave); }
+.tabela-nutricional td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tabela-nutricional-imagem {
+  width: 76px;
+  padding: 6px !important;
+  vertical-align: middle;
+}
+.tabela-nutricional-imagem img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+.tabela-nutricional-analise {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 6px 2px 0;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  font-style: italic;
+}
+
 /* ---------- Total do dia / meta calórica ---------- */
 .kcal-chip { color: var(--verde-escuro); font-style: normal; font-weight: 600; font-size: 0.82rem; }
 .total-numeros { font-size: 1.05rem; margin: 4px 0 8px; }
