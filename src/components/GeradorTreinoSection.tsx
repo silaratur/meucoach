@@ -6,6 +6,7 @@ import { dataLocalDe } from '../calc';
 import { gerarPlano, gerarTreino } from '../api';
 import { IconeComecar, IconeEditar, IconeExcluir, IconeCoach, IconeAquecimento, IconeCorrida, IconeAlongamento, IconeDica, ICONE_LOCAL } from './Icones';
 import { Zap, CalendarDays, TrendingUp, PartyPopper } from 'lucide-react';
+import Markdown from './Markdown';
 
 // Relatório do dia mais recente (ontem ou hoje) — se indicar déficit/excesso de calorias ou
 // atividade, entra como contexto pra recomendação de hoje favorecer recuperação gradual.
@@ -299,10 +300,10 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
           <p className="meta-texto">
             {plano.semanas === 1 ? '1 semana' : `${plano.semanas} semanas`} · {plano.dias.length} treinos
           </p>
-          <p className="meta-texto">{plano.avaliacaoInicial}</p>
+          <div className="avaliacao-inicial"><Markdown texto={plano.avaliacaoInicial} /></div>
           <details className="sugestao">
             <summary><strong><TrendingUp size={15} /> Estratégia do plano</strong></summary>
-            <p>{plano.estrategiaMes}</p>
+            <Markdown texto={plano.estrategiaMes} />
           </details>
           <p className="resumo-evolucao">
             <strong>{feitos}/{plano.dias.length}</strong> treinos concluídos

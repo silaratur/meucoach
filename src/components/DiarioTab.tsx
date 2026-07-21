@@ -392,9 +392,10 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                 <strong>{s.nome}</strong>
                 <small> {Math.round(s.calorias)} kcal · P {Math.round(s.proteinas_g)}g · C {Math.round(s.carboidratos_g)}g · G {Math.round(s.gorduras_g)}g</small>
               </summary>
-              <p><em>{s.motivo}</em></p>
+              <p className="sugestao-motivo"><Markdown texto={s.motivo} inline /></p>
               <p><strong>Ingredientes:</strong> {s.ingredientes.join(', ')}</p>
-              <p><strong>Preparo:</strong> {s.preparo}</p>
+              <p><strong>Preparo:</strong></p>
+              <Markdown texto={s.preparo} />
               <button
                 className="primario"
                 onClick={() => {

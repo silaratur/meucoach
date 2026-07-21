@@ -743,7 +743,7 @@ button.destaque {
 }
 .cartao-acao input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--verde); }
 .cartao-acao.feito { opacity: 0.6; }
-.cartao-acao.feito span { text-decoration: line-through; }
+.cartao-acao.feito .markdown-inline { text-decoration: line-through; }
 
 /* ---------- Treino sugerido para hoje ---------- */
 .objetivo-sugerido { font-size: 0.92rem; margin: 4px 0 8px; }
@@ -1010,6 +1010,14 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .markdown { font-size: 0.95rem; line-height: 1.5; }
 .markdown h3, .markdown h4 { margin: 12px 0 4px; }
 .markdown ul { margin: 6px 0; padding-left: 20px; }
+.markdown p { margin: 0 0 8px; }
+.markdown p:last-child { margin-bottom: 0; }
+.markdown-inline { line-height: inherit; }
+
+.sugestao-motivo { font-style: italic; }
+.avaliacao-inicial { font-size: 0.85rem; color: var(--texto-suave); margin: 4px 0 8px; }
+.avaliacao-inicial .markdown { font-size: 0.85rem; }
+.avaliacao-inicial .markdown p:last-child { margin-bottom: 0; }
 
 /* ---------- Doação Pix (Perfil) ---------- */
 .apoio-pix {

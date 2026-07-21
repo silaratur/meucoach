@@ -61,7 +61,7 @@ function CardAcao({ texto }: { texto: string }) {
   return (
     <label className={`cartao-acao ${feito ? 'feito' : ''}`}>
       <input type="checkbox" checked={feito} onChange={() => setFeito((v) => !v)} />
-      <span>{texto}</span>
+      <Markdown texto={texto} inline />
     </label>
   );
 }
