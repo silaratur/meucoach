@@ -25,6 +25,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 65 
 
 const DADOS_VAZIOS = { dias: {}, treinos: [], sessoes: [], avaliacoes: [], pesagens: [], planosCorrida: [], atividadesDiarias: [], planosMusculacao: [] };
 
+// ---------- Lockdown temporário (app em atualização) ----------
+// Pedido do dono: só estas contas acessam por enquanto, sem inscrição nova, enquanto ele
+// prepara novos recursos. Pra reabrir: apagar este bloco e as duas checagens que o usam
+// (POST /api/auth/criar e dentro de `autenticar`) — não precisa reverter o commit inteiro.
+const INSCRICOES_ABERTAS = false;
+const CONTAS_PERMITIDAS_NO_LOCKDOWN = new Set([
+  '8d897c0d-ec13-4869-ab8c-0775a0c7967b', // Marcelo V Silveira (dono)
+  'd242c53a-305a-4bb5-adaa-dac177e0602b', // André Santos Cavalcante
+  '469399c6-1466-44e0-9d90-0a973a6256f1', // Mariana
+]);
+const MENSAGEM_LOCKDOWN =
+  'O Meu Coach está em atualização — estamos preparando novos recursos. Novos membros serão aceitos em breve. Obrigado pela paciência!';
+
 // ---------- Autenticação (nome + PIN) ----------
 function validarNomePin(nome, pin) {
   if (typeof nome !== 'string' || !nome.trim()) return 'Informe um nome.';
@@ -37,6 +50,7 @@ function assinarToken(perfilId) {
 }
 
 app.post('/api/auth/criar', (req, res) => {
+  if (!INSCRICOES_ABERTAS) return res.status(403).json({ error: MENSAGEM_LOCKDOWN });
   const { nome, pin } = req.body ?? {};
   const erro = validarNomePin(nome, pin);
   if (erro) return res.status(400).json({ error: erro });
@@ -67,6 +81,7 @@ app.post('/api/auth/entrar', (req, res) => {
   const row = db.prepare('SELECT id, pin_hash, perfil_json, dados_json FROM perfis WHERE nome_lower = ?').get(nomeLower);
   if (!row) return res.status(404).json({ error: 'Não encontrei ninguém com esse nome. Quer criar uma conta?' });
   if (!bcrypt.compareSync(pin, row.pin_hash)) return res.status(401).json({ error: 'PIN incorreto.' });
+  if (!CONTAS_PERMITIDAS_NO_LOCKDOWN.has(row.id)) return res.status(403).json({ error: MENSAGEM_LOCKDOWN });
 
   res.json({
     token: assinarToken(row.id),
@@ -80,6 +95,7 @@ function autenticar(req, res, next) {
   if (!m) return res.status(401).json({ error: 'Não autenticado. Faça login novamente.' });
   try {
     req.perfilId = jwt.verify(m[1], JWT_SECRET).pid;
+    if (!CONTAS_PERMITIDAS_NO_LOCKDOWN.has(req.perfilId)) return res.status(403).json({ error: MENSAGEM_LOCKDOWN });
     next();
   } catch {
     res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
