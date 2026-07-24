@@ -99,9 +99,16 @@ export function metaDiaria(perfil, sessoes, atividades = [], treinoHoje) {
       : perfil.objetivo === 'hipertrofia' || perfil.objetivo === 'forca'
         ? 1.8
         : 1.5;
+  const proteinas_g = Math.round(perfil.pesoKg * gPorKg);
+  // Gordura como 25% do total (dentro da faixa 20-35% recomendada) e carboidrato absorve o
+  // resto — assim os três macros sempre somam de volta ao total de calorias da meta.
+  const gorduras_g = Math.round((kcal * 0.25) / 9);
+  const carboidratos_g = Math.max(0, Math.round((kcal - proteinas_g * 4 - gorduras_g * 9) / 4));
   return {
     kcal,
-    proteinas_g: Math.round(perfil.pesoKg * gPorKg),
+    proteinas_g,
+    carboidratos_g,
+    gorduras_g,
     descricao: `${treinosSemana} treino(s) nos últimos 7 dias${notaDia}`,
   };
 }

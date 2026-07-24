@@ -24,6 +24,7 @@ export {
   Camera as IconeCamera,
   Image as IconeGaleria,
   Mic as IconeMicrofone,
+  AudioLines as IconeNotaAudio,
   KeyRound as IconeChave,
   ImageOff as IconeImagemIndisponivel,
   Save as IconeSalvar,

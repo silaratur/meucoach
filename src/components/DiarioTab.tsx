@@ -254,6 +254,8 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const meta = metaDiaria(perfil, dados.sessoes, dados.atividadesDiarias, treinoHoje);
   const pctMeta = meta && totais.calorias > 0 ? Math.min(100, Math.round((totais.calorias / meta.kcal) * 100)) : 0;
   const pctProteina = meta && totais.proteinas_g > 0 ? Math.min(100, Math.round((totais.proteinas_g / meta.proteinas_g) * 100)) : 0;
+  const pctCarboidrato = meta && totais.carboidratos_g > 0 ? Math.min(100, Math.round((totais.carboidratos_g / meta.carboidratos_g) * 100)) : 0;
+  const pctGordura = meta && totais.gorduras_g > 0 ? Math.min(100, Math.round((totais.gorduras_g / meta.gorduras_g) * 100)) : 0;
 
   return (
     <div>
@@ -277,13 +279,20 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
             <div className={`barra-meta-cheia ${pctProteina > 100 ? 'estourou' : ''}`} style={{ width: `${Math.min(pctProteina, 100)}%` }} />
           </div>
 
-          <div className="macro-simples">
-            <span className="rotulo"><Wheat size={15} style={{ color: '#3b82f6' }} /> Carboidratos:</span>
-            <strong>{Math.round(totais.carboidratos_g)}g</strong>
+          <div className="macro-linha-titulo">
+            <strong><Wheat size={15} style={{ color: '#3b82f6' }} /> Carboidratos</strong>
+            <span>{Math.round(totais.carboidratos_g)}/{meta?.carboidratos_g ?? '—'}g</span>
           </div>
-          <div className="macro-simples">
-            <span className="rotulo"><Droplet size={15} style={{ color: '#f59e0b' }} /> Gordura:</span>
-            <strong>{Math.round(totais.gorduras_g)}g</strong>
+          <div className="barra-meta">
+            <div className={`barra-meta-cheia ${pctCarboidrato > 100 ? 'estourou' : ''}`} style={{ width: `${Math.min(pctCarboidrato, 100)}%` }} />
+          </div>
+
+          <div className="macro-linha-titulo">
+            <strong><Droplet size={15} style={{ color: '#f59e0b' }} /> Gordura</strong>
+            <span>{Math.round(totais.gorduras_g)}/{meta?.gorduras_g ?? '—'}g</span>
+          </div>
+          <div className="barra-meta">
+            <div className={`barra-meta-cheia ${pctGordura > 100 ? 'estourou' : ''}`} style={{ width: `${Math.min(pctGordura, 100)}%` }} />
           </div>
         </div>
 

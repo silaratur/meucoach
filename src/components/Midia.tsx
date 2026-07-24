@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MediaRef, TipoMidia } from '../media';
 import { comprimirImagem, salvarMidia, urlMidia } from '../media';
-import { IconeCamera, IconeGaleria, IconeMicrofone, IconeParar, IconeVideo } from './Icones';
+import { IconeCamera, IconeGaleria, IconeNotaAudio, IconeParar, IconeVideo } from './Icones';
 
 // ---------- Botões para anexar foto / vídeo / áudio ----------
 interface PickerProps {
@@ -85,7 +85,7 @@ export function MediaPicker({ aoAdicionar, tipos = ['foto', 'video', 'audio'], c
       {tipos.includes('audio') && (
         <>
           <button type="button" className={gravando ? 'gravando' : ''} onClick={alternarGravacao} title={gravando ? 'Parar gravação' : 'Áudio'}>
-            {gravando ? <IconeParar size={17} /> : <IconeMicrofone size={17} />}{!compacto && (gravando ? '' : ' Áudio')}
+            {gravando ? <IconeParar size={17} /> : <IconeNotaAudio size={17} />}{!compacto && (gravando ? '' : ' Áudio')}
           </button>
           <input ref={audioRef} type="file" accept="audio/*" hidden onChange={(e) => aoEscolher(e, 'audio')} />
         </>

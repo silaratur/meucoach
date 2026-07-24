@@ -176,11 +176,9 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
             <h3 className="rotulo-coluna">Macros de Hoje</h3>
             <div className="mini-barra-linha">
               <div className="barra-meta mini"><div className="barra-meta-cheia" style={{ width: `${pctCaloriasHoje}%` }} /></div>
-              <span>{totaisHoje.itensComEstimativa ? Math.round(totaisHoje.calorias) : 0} kcal</span>
-            </div>
-            <div className="mini-barra-linha">
-              <div className="barra-meta mini"><div className="barra-meta-cheia" style={{ width: '100%', background: '#f59e0b' }} /></div>
-              <span>{meta ? meta.kcal : '—'} kcal</span>
+              <span>
+                {totaisHoje.itensComEstimativa ? Math.round(totaisHoje.calorias) : 0} / {meta ? meta.kcal : '—'} kcal
+              </span>
             </div>
           </div>
           <div className="coluna-resumo">

@@ -354,6 +354,21 @@ button:disabled { opacity: 0.6; }
 
 .conta-acoes { border-top: 1px solid var(--borda); padding-top: 12px; margin-top: 16px; }
 
+/* Excluir conta fica visualmente separado e discreto — ação irreversível, não deve competir
+   em peso visual com "Sair deste aparelho" (reversível) nem ficar fácil de tocar por engano. */
+.zona-perigo { margin-top: 22px; text-align: center; }
+.link-perigo {
+  background: none;
+  border: none;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.link-perigo:hover:not(:disabled) { color: var(--vermelho); }
+
 /* ---------- Player ---------- */
 .tag-rpe { color: var(--tom-atencao-texto); font-weight: 600; }
 .botao-repetir { margin-bottom: 12px; background: #2563eb; border-color: #1d4ed8; }
@@ -632,9 +647,6 @@ button.destaque {
 .macro-linha-titulo { display: flex; justify-content: space-between; align-items: center; font-size: 0.92rem; margin-top: 8px; }
 .macro-linha-titulo strong { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .macro-linha-titulo span { font-variant-numeric: tabular-nums; color: var(--texto-suave); }
-.macro-simples { display: flex; justify-content: space-between; align-items: center; font-size: 0.88rem; padding: 6px 0; border-top: 1px solid var(--borda); }
-.macro-simples .rotulo { display: flex; align-items: center; gap: 6px; color: var(--texto-suave); }
-.macro-simples strong { font-variant-numeric: tabular-nums; }
 
 /* ---------- Seletor de refeição em segmento único (chips conectados) ---------- */
 .chips-tipo.segmentado {
@@ -1018,6 +1030,18 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .avaliacao-inicial { font-size: 0.85rem; color: var(--texto-suave); margin: 4px 0 8px; }
 .avaliacao-inicial .markdown { font-size: 0.85rem; }
 .avaliacao-inicial .markdown p:last-child { margin-bottom: 0; }
+
+/* ---------- Seções do formulário de Perfil ---------- */
+.rotulo-secao {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-suave);
+  margin: 22px 0 2px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borda);
+}
 
 /* ---------- Doação Pix (Perfil) ---------- */
 .apoio-pix {

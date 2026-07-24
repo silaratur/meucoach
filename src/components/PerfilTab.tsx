@@ -108,6 +108,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
     <div className="cartao">
       <h2><IconePerfil size={19} /> Seu perfil</h2>
 
+      <h3 className="rotulo-secao">Dados pessoais</h3>
       <label>Tema do aplicativo</label>
       <div className="chips-tipo">
         <button type="button" className={`chip ${(form.tema ?? 'escuro') === 'escuro' ? 'ativa' : ''}`} onClick={() => trocarTema('escuro')}>
@@ -154,6 +155,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
         ))}
       </select>
 
+      <h3 className="rotulo-secao">Preferências alimentares</h3>
       <label>Restrições e alergias</label>
       <textarea value={form.restricoes ?? ''} onChange={(e) => set('restricoes', e.target.value)} placeholder="Ex.: intolerância a lactose, não como carne vermelha..." />
 
@@ -182,6 +184,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
         placeholder="Outros (ex.: creatina 5g/dia, ZMA...)"
       />
 
+      <h3 className="rotulo-secao">Preferências de treino</h3>
       <label>Descanso padrão entre séries (segundos)</label>
       <input
         type="number"
@@ -203,8 +206,11 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
         <button className="secundario" onClick={() => { if (confirm('Sair deste aparelho? Seus dados continuam salvos — é só entrar de novo com seu nome e PIN.')) aoSair(); }}>
 <LogOut size={16} /> Sair deste aparelho
         </button>
+      </div>
+
+      <div className="zona-perigo">
         <button
-          className="perigo"
+          className="link-perigo"
           disabled={excluindo}
           onClick={async () => {
             if (!confirm(`Excluir a conta de ${form.nome} e TODOS os dados (refeições, treinos, fotos, evolução)? Isso não pode ser desfeito.`)) return;
@@ -216,7 +222,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
             }
           }}
         >
-          {excluindo ? 'Excluindo...' : <><IconeExcluir size={15} /> Excluir minha conta</>}
+          {excluindo ? 'Excluindo...' : <><IconeExcluir size={13} /> Excluir minha conta e todos os dados</>}
         </button>
       </div>
     </div>

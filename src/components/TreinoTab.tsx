@@ -4,7 +4,7 @@ import { DIAS_SEMANA, HORARIOS_TREINO, LOCAIS, NIVEIS_EXPERIENCIA } from '../typ
 import CorridaSection from './CorridaSection';
 import { uid } from '../storage';
 import { excluirMidias } from '../media';
-import { linkVideoExercicio, grupoCorporal } from '../calc';
+import { diaSemanaHoje, linkVideoExercicio, grupoCorporal } from '../calc';
 import { MediaGallery, MediaPicker } from './Midia';
 import WorkoutPlayer from './WorkoutPlayer';
 import VisaoSemana from './VisaoSemana';
@@ -173,9 +173,12 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
   const [atividadeLivre, setAtividadeLivre] = useState('');
   const [editando, setEditando] = useState<Treino | null>(null);
 
-  // Treino sugerido para hoje: próximo dia não concluído do plano de musculação ativo.
+  // Próximo dia não concluído do plano de musculação ativo — só chama de "para Hoje" quando
+  // hoje realmente está entre os dias de treino programados (evita contradizer o card "Sua
+  // semana", que pode estar mostrando "dia de descanso" ao mesmo tempo).
   const planoAtivo = dados.planosMusculacao[0];
   const proximoDia = planoAtivo?.dias.find((d) => !planoAtivo.concluidos.includes(d.id));
+  const hojeEhDiaDeMusculacao = perfil.diasMusculacao?.includes(diaSemanaHoje()) ?? false;
 
   function iniciarTreinoSugerido() {
     if (!planoAtivo || !proximoDia) return;
@@ -273,7 +276,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
 
       {proximoDia && planoAtivo && (
         <div className="cartao">
-          <h2><Zap size={19} /> Treino Sugerido para Hoje</h2>
+          <h2><Zap size={19} /> {hojeEhDiaDeMusculacao ? 'Treino Sugerido para Hoje' : 'Próximo Treino do Seu Plano'}</h2>
           <p className="objetivo-sugerido">
             <strong>{proximoDia.objetivo}</strong> · {proximoDia.gruposMusculares} · ~{proximoDia.tempoEstimadoMin} min
           </p>
