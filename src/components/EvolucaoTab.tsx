@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import type { DadosPerfil, Perfil, Pesagem } from '../types';
 import { hojeISO } from '../storage';
-import { recordesPessoais } from '../calc';
+import { recordesPessoais, streakDias } from '../calc';
 import { analisarAtividadeFoto, analisarBalanca, avaliarSono } from '../api';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
 import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
 import Markdown from './Markdown';
-import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays } from 'lucide-react';
+import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2 } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -370,6 +370,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
 
   // ----- recordes pessoais -----
   const recordes = useMemo(() => recordesPessoais(dados.sessoes), [dados.sessoes]);
+  const streak = streakDias(dados.sessoes);
 
   // ----- progressão de carga por exercício -----
   const exerciciosComCarga = useMemo(() => {
@@ -439,11 +440,88 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
     progressoMeta = Math.min(100, Math.max(0, bruto));
   }
   const faltamKg = pesoMeta != null && pesoAtualNum != null ? Math.abs(pesoMeta - pesoAtualNum) : null;
+  const treinosSemanaAtual = frequencia[frequencia.length - 1]?.valor ?? 0;
+
+  // Cartão de resumo pra compartilhar (imagem gerada por Canvas, sem biblioteca externa) — usa
+  // Web Share API quando disponível (compartilha direto pro WhatsApp/Instagram etc.), com fallback
+  // pra baixar o PNG quando o navegador não suporta compartilhar arquivos.
+  async function compartilharProgresso() {
+    const W = 1080;
+    const H = 1350;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#12141a');
+    grad.addColorStop(1, '#1b1e26');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#22c55e';
+    ctx.font = 'bold 48px system-ui, sans-serif';
+    ctx.fillText('Meu Coach', 60, 120);
+
+    ctx.fillStyle = '#9aa1ac';
+    ctx.font = '32px system-ui, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }), 60, 168);
+
+    ctx.fillStyle = '#e9ebef';
+    ctx.font = 'bold 56px system-ui, sans-serif';
+    ctx.fillText(`Progresso de ${perfil.nome}`, 60, 270);
+
+    let y = 380;
+    const linha = (rotulo: string, valor: string, cor = '#e9ebef') => {
+      ctx.fillStyle = '#9aa1ac';
+      ctx.font = '30px system-ui, sans-serif';
+      ctx.fillText(rotulo, 60, y);
+      ctx.fillStyle = cor;
+      ctx.font = 'bold 64px system-ui, sans-serif';
+      ctx.fillText(valor, 60, y + 72);
+      y += 170;
+    };
+
+    if (pesoAtualNum != null) {
+      const variacaoTexto = pesagens.length > 1 ? ` (${variacao > 0 ? '+' : ''}${variacao.toFixed(1)} kg)` : '';
+      linha('Peso atual', `${pesoAtualNum} kg${variacaoTexto}`);
+    }
+    if (streak > 0) linha('Sequência ativa', `${streak} ${streak === 1 ? 'dia' : 'dias'}`, '#22c55e');
+    linha('Treinos essa semana', `${treinosSemanaAtual}`);
+    if (recordes[0]) linha('Recorde recente', `${recordes[0].nome} — ${recordes[0].cargaKg} kg`);
+
+    ctx.fillStyle = '#5b6472';
+    ctx.font = '26px system-ui, sans-serif';
+    ctx.fillText('Feito com o Meu Coach', 60, H - 60);
+
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return;
+    const arquivo = new File([blob], 'progresso-meu-coach.png', { type: 'image/png' });
+
+    if (navigator.canShare?.({ files: [arquivo] })) {
+      try {
+        await navigator.share({ files: [arquivo], title: 'Meu progresso no Meu Coach' });
+        return;
+      } catch {
+        // Usuário cancelou o compartilhamento nativo — cai pro download abaixo.
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'progresso-meu-coach.png';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div>
       <div className="cartao">
-        <h2><IconeMusculacao size={19} /> Peso &amp; Progresso</h2>
+        <div className="cabecalho-avaliacao">
+          <h2><IconeMusculacao size={19} /> Peso &amp; Progresso</h2>
+          <button className="mini secundario" onClick={compartilharProgresso}><Share2 size={13} /> Compartilhar</button>
+        </div>
 
         {pesagens.length > 0 && <p className="peso-grande">{ultimoPeso.pesoKg} kg</p>}
 

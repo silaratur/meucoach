@@ -253,6 +253,78 @@ export interface SugestaoRefeicao {
   motivo: string;
 }
 
+// ---------- Plano alimentar (semana(s)-modelo geradas por IA, repetidas/alternadas) ----------
+// Cópia só dos 4 campos numéricos de MetaDiaria (calc.ts) — não dá pra importar o tipo direto
+// daquele arquivo aqui porque calc.ts já importa de types.ts (criaria import circular).
+export interface MetaDiaAlimentar {
+  kcal: number;
+  proteinas_g: number;
+  carboidratos_g: number;
+  gorduras_g: number;
+}
+
+export interface ItemRefeicao {
+  id: string;
+  nome: string;
+  quantidade: number;
+  unidade: string; // "g" | "ml" | "unidade" | "colher de sopa" | "fatia" | "xícara"... (texto livre)
+  calorias: number;
+  proteinas_g: number;
+  carboidratos_g: number;
+  gorduras_g: number;
+  receitaId?: string; // só quando o item exige preparo com passos (referencia ReceitaPlano.id)
+}
+
+export interface RefeicaoPlano {
+  id: string;
+  tipo: TipoRefeicao; // nunca 'suplemento' aqui
+  nomeSugerido: string;
+  horarioSugerido?: string; // "HH:mm"
+  observacao?: string;
+  itens: ItemRefeicao[];
+}
+
+export interface DiaModeloAlimentar {
+  id: string;
+  semanaModelo: 'A' | 'B'; // só existe 'B' quando o plano usa 2 semanas-modelo (2-4 semanas)
+  diaSemana: string; // um de DIAS_SEMANA
+  metaDia: MetaDiaAlimentar | null; // calculada client-side via metaDiaria(), não pela IA
+  treinoNesteDia: boolean;
+  refeicoes: RefeicaoPlano[];
+}
+
+export interface ReceitaPlano {
+  id: string;
+  nome: string;
+  tempoPreparoMin: number;
+  ingredientes: { nome: string; quantidade: number; unidade: string }[];
+  modoPreparo: string[]; // passos numerados
+}
+
+// Preço não entra aqui de propósito: a IA não tem acesso a preços reais de mercado, e uma
+// estimativa "aproximada" gerada por ela é confiável demais pra parecer real e errada demais pra
+// ser útil. Só quantidade, que é calculada de forma determinística a partir do cardápio.
+export interface ItemListaCompras {
+  id: string;
+  nome: string;
+  quantidadeTotal: number;
+  unidade: string;
+}
+
+export interface PlanoAlimentar {
+  id: string;
+  nome: string;
+  semanas: number; // 1-4, duração real escolhida
+  tiposRefeicaoIncluidos: TipoRefeicao[];
+  avaliacaoInicial: string; // markdown
+  estrategia: string; // markdown
+  diasModelo: DiaModeloAlimentar[]; // 7 itens (só template A) ou 14 (A+B)
+  receitas: ReceitaPlano[]; // de-duplicadas
+  listaCompras: ItemListaCompras[]; // já agregada para TODO o período do plano
+  recomendacoesGerais?: string; // markdown
+  criadoEm: string;
+}
+
 export interface Pesagem {
   data: string; // "yyyy-MM-dd"
   pesoKg: number;
@@ -287,5 +359,6 @@ export interface DadosPerfil {
   pesagens: Pesagem[];
   planosCorrida: PlanoCorrida[];
   planosMusculacao: PlanoMusculacao[];
+  planosAlimentares: PlanoAlimentar[];
   atividadesDiarias: AtividadeDiaria[];
 }

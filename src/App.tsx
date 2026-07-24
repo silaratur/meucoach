@@ -5,17 +5,18 @@ import { definirPerfilAtivo, esquecerNesteAparelho, listarSessoes, perfilAtivoId
 import { buscarPerfilEDados, excluirContaRemota, salvarDadosRemoto, salvarPerfilRemoto } from './storage';
 import { aoNaoAutorizado, definirToken } from './session';
 import { aplicarTema } from './theme';
-import { IconeCoach, IconeEvolucao, IconeMusculacao, IconePerfil, IconeRefeicao } from './components/Icones';
+import { IconeCoach, IconeDieta, IconeEvolucao, IconeMusculacao, IconePerfil, IconeRefeicao } from './components/Icones';
 import PerfilTab from './components/PerfilTab';
 import LoginTab from './components/LoginTab';
 import LandingPage from './components/LandingPage';
 import DiarioTab from './components/DiarioTab';
+import DietaTab from './components/DietaTab';
 import TreinoTab from './components/TreinoTab';
 import CoachTab from './components/CoachTab';
 import EvolucaoTab from './components/EvolucaoTab';
 import OnboardingWizard from './components/OnboardingWizard';
 
-type Aba = 'hoje' | 'treino' | 'evolucao' | 'coach' | 'perfil';
+type Aba = 'hoje' | 'dieta' | 'treino' | 'evolucao' | 'coach' | 'perfil';
 
 export default function App() {
   const [ativoId, setAtivoId] = useState<string | null>(() => perfilAtivoId());
@@ -162,6 +163,7 @@ export default function App() {
       <main className="conteudo">
         <div key={aba} className="aba-conteudo">
           {aba === 'hoje' && <DiarioTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
+          {aba === 'dieta' && <DietaTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
           {aba === 'treino' && (
             <TreinoTab perfil={perfil} dados={dados} atualizar={atualizarDados} aoAtualizarPerfil={atualizarPerfil} />
           )}
@@ -189,6 +191,9 @@ export default function App() {
       <nav className="abas">
         <button className={aba === 'hoje' ? 'ativa' : ''} onClick={() => setAba('hoje')}>
           <IconeRefeicao size={22} strokeWidth={2} /><span>Hoje</span>
+        </button>
+        <button className={aba === 'dieta' ? 'ativa' : ''} onClick={() => setAba('dieta')}>
+          <IconeDieta size={22} strokeWidth={2} /><span>Dieta</span>
         </button>
         <button className={aba === 'treino' ? 'ativa' : ''} onClick={() => setAba('treino')}>
           <IconeMusculacao size={22} strokeWidth={2} /><span>Treino</span>

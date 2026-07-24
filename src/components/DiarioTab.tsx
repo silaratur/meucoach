@@ -4,7 +4,7 @@ import { TIPOS_REFEICAO } from '../types';
 import { hojeISO, horaAgora, uid } from '../storage';
 import { analisarFoto, estimarCalorias, sugerirRefeicoes } from '../api';
 import { ditadoDisponivel, iniciarDitado } from '../speech';
-import { dataLocalDe, diaSemanaHoje, metaDiaria, totaisDoDia } from '../calc';
+import { dataLocalDe, diaSemanaHoje, metaDiaria, streakDias, totaisDoDia } from '../calc';
 import { OBJETIVOS } from '../types';
 import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha } from './Icones';
 import Markdown from './Markdown';
@@ -256,11 +256,17 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const pctProteina = meta && totais.proteinas_g > 0 ? Math.min(100, Math.round((totais.proteinas_g / meta.proteinas_g) * 100)) : 0;
   const pctCarboidrato = meta && totais.carboidratos_g > 0 ? Math.min(100, Math.round((totais.carboidratos_g / meta.carboidratos_g) * 100)) : 0;
   const pctGordura = meta && totais.gorduras_g > 0 ? Math.min(100, Math.round((totais.gorduras_g / meta.gorduras_g) * 100)) : 0;
+  const streak = streakDias(dados.sessoes);
 
   return (
     <div>
       <div className="cartao">
         <h2><CalendarDays size={19} /> {dataBonita}</h2>
+        {streak > 0 && (
+          <p className="streak-texto">
+            <Flame size={15} /> Sequência de <strong>{streak}</strong> {streak === 1 ? 'dia ativo' : 'dias ativos'}!
+          </p>
+        )}
 
         <div className="macro-resumo">
           <div className="macro-linha-titulo">

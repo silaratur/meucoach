@@ -1,4 +1,4 @@
-import type { DiaAlimentar, DiaTreinoPlano, Exercicio, Perfil, Pesagem, Registro, SugestaoRefeicao, Treino } from './types';
+import type { DiaAlimentar, DiaTreinoPlano, Exercicio, MetaDiaAlimentar, Perfil, Pesagem, Registro, SugestaoRefeicao, Treino, TipoRefeicao } from './types';
 import { cabecalhos, notificarNaoAutorizado } from './session';
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -193,6 +193,74 @@ export function gerarPlano(
     planoAnteriorResumo,
     foco,
     avaliacaoRecente,
+    atividadeRecente,
+  });
+}
+
+export interface MetaPorDiaSemana {
+  diaSemana: string;
+  treinoNesteDia: boolean;
+  meta: MetaDiaAlimentar | null;
+}
+
+export interface ItemRefeicaoIA {
+  nome: string;
+  quantidade: number;
+  unidade: string;
+  calorias: number;
+  proteinas_g: number;
+  carboidratos_g: number;
+  gorduras_g: number;
+  receitaNome: string;
+}
+
+export interface RefeicaoPlanoIA {
+  tipo: TipoRefeicao;
+  nomeSugerido: string;
+  horarioSugerido: string;
+  itens: ItemRefeicaoIA[];
+  observacao: string;
+}
+
+export interface DiaModeloAlimentarIA {
+  semanaModelo: 'A' | 'B';
+  diaSemana: string;
+  refeicoes: RefeicaoPlanoIA[];
+}
+
+export interface ReceitaPlanoIA {
+  nome: string;
+  tempoPreparoMin: number;
+  ingredientes: { nome: string; quantidade: number; unidade: string }[];
+  modoPreparo: string[];
+}
+
+export interface PlanoAlimentarIA {
+  nome: string;
+  semanas: number;
+  avaliacaoInicial: string;
+  estrategia: string;
+  diasModelo: DiaModeloAlimentarIA[];
+  receitas: ReceitaPlanoIA[];
+  recomendacoesGerais: string;
+}
+
+export function gerarPlanoAlimentar(
+  perfil: Perfil,
+  semanas: number,
+  tiposRefeicao: TipoRefeicao[],
+  metasPorDiaSemana: MetaPorDiaSemana[],
+  observacoes: string,
+  sessoesRecentes: unknown[],
+  atividadeRecente?: unknown,
+) {
+  return post<PlanoAlimentarIA>('/api/ai/plano-alimentar', {
+    perfil,
+    semanas,
+    tiposRefeicao,
+    metasPorDiaSemana,
+    observacoes,
+    sessoesRecentes,
     atividadeRecente,
   });
 }

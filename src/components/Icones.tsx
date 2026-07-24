@@ -6,6 +6,7 @@
 // substituídos por ícones para manter a aparência de um app profissional de saúde.
 export {
   Utensils as IconeRefeicao,
+  Salad as IconeDieta,
   Dumbbell as IconeMusculacao,
   TrendingUp as IconeEvolucao,
   Bot as IconeCoach,

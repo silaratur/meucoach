@@ -54,6 +54,20 @@ CREATE TABLE IF NOT EXISTS musculo_exercicio (
   encontrado_em TEXT NOT NULL
 );
 
+-- Inscrições de notificação push (lembrete diário) — uma linha por navegador/aparelho inscrito,
+-- não por perfil (a mesma pessoa pode ter mais de um aparelho). endpoint é único por natureza
+-- (identifica o navegador/aparelho junto ao serviço de push), então serve de chave de upsert.
+CREATE TABLE IF NOT EXISTS push_inscricoes (
+  id TEXT PRIMARY KEY,
+  perfil_id TEXT NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  criado_em TEXT NOT NULL,
+  FOREIGN KEY (perfil_id) REFERENCES perfis(id)
+);
+CREATE INDEX IF NOT EXISTS idx_push_perfil ON push_inscricoes(perfil_id);
+
 -- Tabela órfã: era o status da assinatura mensal via Mercado Pago (removida — o app voltou a
 -- ser gratuito, com doação Pix opcional em vez de cobrança automática). Mantida só porque já
 -- tem dado real de teste em produção; não é lida nem escrita por nenhum código atual.

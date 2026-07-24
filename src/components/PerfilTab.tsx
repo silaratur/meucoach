@@ -4,7 +4,8 @@ import { OBJETIVOS, SUPLEMENTOS_COMUNS } from '../types';
 import { idadeDe } from '../calc';
 import { aplicarTema } from '../theme';
 import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
-import { Moon, Sun, LogOut, Heart, Copy, Check } from 'lucide-react';
+import { Moon, Sun, LogOut, Heart, Copy, Check, Bell, BellOff } from 'lucide-react';
+import { ativarLembretes, desativarLembretes, inscricaoAtiva, permissaoPush, suportaPush, testarLembrete } from '../push';
 
 interface Props {
   perfil: Perfil;
@@ -51,6 +52,78 @@ function ApoioCard() {
           {copiado ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar chave</>}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Lembrete diário: avisa (notificação push) quem ainda não registrou nada às 19:30, 3h antes do
+// relatório automático das 22:30 — fecha o loop do "coach que acompanha todo dia" mesmo com o
+// app fechado. Estado da inscrição mora no navegador (Push API), não no perfil salvo no servidor.
+function LembretesCard() {
+  const [inscrito, setInscrito] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [testando, setTestando] = useState(false);
+  const [mensagem, setMensagem] = useState('');
+  const suportado = suportaPush();
+  const bloqueadoPeloNavegador = suportado && permissaoPush() === 'denied';
+
+  useEffect(() => {
+    if (suportado) inscricaoAtiva().then(setInscrito);
+  }, [suportado]);
+
+  async function alternar() {
+    setCarregando(true);
+    setMensagem('');
+    try {
+      if (inscrito) {
+        await desativarLembretes();
+        setInscrito(false);
+      } else {
+        const ok = await ativarLembretes();
+        setInscrito(ok);
+        if (!ok) setMensagem('Permissão de notificação negada — ative nas configurações do navegador pra usar os lembretes.');
+      }
+    } catch (e) {
+      setMensagem((e as Error).message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function testar() {
+    setTestando(true);
+    setMensagem('');
+    try {
+      await testarLembrete();
+      setMensagem('Notificação de teste enviada — confira se ela chegou.');
+    } catch (e) {
+      setMensagem((e as Error).message);
+    } finally {
+      setTestando(false);
+    }
+  }
+
+  if (!suportado) return null;
+
+  return (
+    <div className="cartao">
+      <h2><Bell size={19} /> Lembrete diário</h2>
+      <p>
+        Se às 19h30 você ainda não tiver registrado nada no dia, o Meu Coach manda uma notificação
+        — 3h antes do relatório automático das 22h30, pra não deixar passar em branco.
+      </p>
+      <div className="botoes">
+        <button type="button" className={inscrito ? 'secundario' : 'primario'} onClick={alternar} disabled={carregando || bloqueadoPeloNavegador}>
+          {inscrito ? <><BellOff size={15} /> Desativar lembretes</> : <><Bell size={15} /> Ativar lembretes</>}
+        </button>
+        {inscrito && (
+          <button type="button" className="secundario" onClick={testar} disabled={testando}>
+            {testando ? 'Enviando...' : 'Testar agora'}
+          </button>
+        )}
+      </div>
+      {bloqueadoPeloNavegador && <p className="meta-texto">Notificações bloqueadas pro Meu Coach neste navegador — precisa liberar nas configurações do site pra ativar.</p>}
+      {mensagem && <p className="meta-texto">{mensagem}</p>}
     </div>
   );
 }
@@ -226,6 +299,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
         </button>
       </div>
     </div>
+    <LembretesCard />
     <ApoioCard />
     </>
   );

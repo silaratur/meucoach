@@ -10,6 +10,7 @@ import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
 import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, totaisDoDia } from './calc.mjs';
 import { buscarMusculoExercicio } from './wger.mjs';
+import { VAPID, enviarPush } from './push.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -23,7 +24,7 @@ const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8';
 const client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 65 * 1024 * 1024 } });
 
-const DADOS_VAZIOS = { dias: {}, treinos: [], sessoes: [], avaliacoes: [], pesagens: [], planosCorrida: [], atividadesDiarias: [], planosMusculacao: [] };
+const DADOS_VAZIOS = { dias: {}, treinos: [], sessoes: [], avaliacoes: [], pesagens: [], planosCorrida: [], atividadesDiarias: [], planosMusculacao: [], planosAlimentares: [] };
 
 // ---------- Lockdown temporário (app em atualização) ----------
 // Pedido do dono: só estas contas acessam por enquanto, sem inscrição nova, enquanto ele
@@ -101,6 +102,45 @@ function autenticar(req, res, next) {
     res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
   }
 }
+
+// ---------- Notificações push (lembrete diário) ----------
+app.get('/api/push/chave-publica', (req, res) => {
+  res.json({ publicKey: VAPID.publicKey });
+});
+
+app.post('/api/push/inscrever', autenticar, (req, res) => {
+  const { endpoint, keys } = req.body ?? {};
+  if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Inscrição de push inválida.' });
+  db.prepare(
+    `INSERT INTO push_inscricoes (id, perfil_id, endpoint, p256dh, auth, criado_em) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET perfil_id = excluded.perfil_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+  ).run(uid(), req.perfilId, endpoint, keys.p256dh, keys.auth, new Date().toISOString());
+  res.json({ ok: true });
+});
+
+app.post('/api/push/cancelar', autenticar, (req, res) => {
+  const { endpoint } = req.body ?? {};
+  if (endpoint) db.prepare('DELETE FROM push_inscricoes WHERE perfil_id = ? AND endpoint = ?').run(req.perfilId, endpoint);
+  else db.prepare('DELETE FROM push_inscricoes WHERE perfil_id = ?').run(req.perfilId);
+  res.json({ ok: true });
+});
+
+// Envia um push imediato pro próprio aparelho — só pra a pessoa confirmar que a permissão e a
+// inscrição estão funcionando de verdade, sem precisar esperar o horário do lembrete automático.
+app.post('/api/push/testar', autenticar, async (req, res) => {
+  const inscricoes = db.prepare('SELECT * FROM push_inscricoes WHERE perfil_id = ?').all(req.perfilId);
+  if (!inscricoes.length) return res.status(404).json({ error: 'Nenhuma inscrição de push encontrada. Ative os lembretes primeiro.' });
+  let enviados = 0;
+  for (const insc of inscricoes) {
+    const ok = await enviarPush(
+      { endpoint: insc.endpoint, keys: { p256dh: insc.p256dh, auth: insc.auth } },
+      { title: 'Meu Coach', body: 'Notificação de teste — se você está vendo isso, os lembretes estão funcionando!', url: '/' },
+    );
+    if (ok) enviados++;
+    else db.prepare('DELETE FROM push_inscricoes WHERE id = ?').run(insc.id);
+  }
+  res.json({ ok: enviados > 0 });
+});
 
 // ---------- Perfil e dados (protegidos) ----------
 app.get('/api/perfil', autenticar, (req, res) => {
@@ -783,6 +823,164 @@ Demais diretrizes:
   }
 });
 
+// ---------- Plano alimentar (semana(s)-modelo "A"/"B" repetidas/alternadas ao longo do período) ----------
+const ROTULOS_REFEICAO_PLANO = {
+  cafe: 'Café da manhã',
+  lanche_manha: 'Lanche da manhã',
+  almoco: 'Almoço',
+  lanche_tarde: 'Lanche da tarde',
+  jantar: 'Jantar',
+  ceia: 'Ceia',
+};
+
+const SCHEMA_ITEM_REFEICAO_PLANO = {
+  type: 'object',
+  properties: {
+    nome: { type: 'string' },
+    quantidade: { type: 'number' },
+    unidade: { type: 'string', description: 'Ex.: "g", "ml", "unidade", "colher de sopa", "colher de chá", "fatia", "xícara", "porção"' },
+    calorias: { type: 'number' },
+    proteinas_g: { type: 'number' },
+    carboidratos_g: { type: 'number' },
+    gorduras_g: { type: 'number' },
+    receitaNome: { type: 'string', description: 'Nome EXATO de uma receita em "receitas" se este item exigir preparo com passos reais; "" se for simples o bastante (ex.: "1 banana", "2 colheres de pasta de amendoim")' },
+  },
+  required: ['nome', 'quantidade', 'unidade', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'receitaNome'],
+  additionalProperties: false,
+};
+
+const SCHEMA_REFEICAO_PLANO = {
+  type: 'object',
+  properties: {
+    tipo: { type: 'string', enum: ['cafe', 'lanche_manha', 'almoco', 'lanche_tarde', 'jantar', 'ceia'] },
+    nomeSugerido: { type: 'string' },
+    horarioSugerido: { type: 'string', description: 'Ex.: "07:30", calibrado ao horário de treino do aluno quando fizer sentido; "" se não houver sugestão específica' },
+    itens: { type: 'array', items: SCHEMA_ITEM_REFEICAO_PLANO },
+    observacao: { type: 'string', description: 'Nota curta opcional (ex.: papel pré/pós-treino desta refeição); "" se não houver' },
+  },
+  required: ['tipo', 'nomeSugerido', 'horarioSugerido', 'itens', 'observacao'],
+  additionalProperties: false,
+};
+
+const SCHEMA_DIA_MODELO_ALIMENTAR = {
+  type: 'object',
+  properties: {
+    semanaModelo: { type: 'string', enum: ['A', 'B'] },
+    diaSemana: { type: 'string', description: 'Ex.: "Segunda"' },
+    refeicoes: { type: 'array', items: SCHEMA_REFEICAO_PLANO },
+  },
+  required: ['semanaModelo', 'diaSemana', 'refeicoes'],
+  additionalProperties: false,
+};
+
+const SCHEMA_RECEITA_PLANO = {
+  type: 'object',
+  properties: {
+    nome: { type: 'string' },
+    tempoPreparoMin: { type: 'integer' },
+    ingredientes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { nome: { type: 'string' }, quantidade: { type: 'number' }, unidade: { type: 'string' } },
+        required: ['nome', 'quantidade', 'unidade'],
+        additionalProperties: false,
+      },
+    },
+    modoPreparo: { type: 'array', items: { type: 'string' }, description: 'Passos numerados, um item por passo' },
+  },
+  required: ['nome', 'tempoPreparoMin', 'ingredientes', 'modoPreparo'],
+  additionalProperties: false,
+};
+
+const SCHEMA_PLANO_ALIMENTAR = {
+  type: 'object',
+  properties: {
+    nome: { type: 'string' },
+    avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
+    estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
+    diasModelo: {
+      type: 'array',
+      description: '7 itens (só semana-modelo A) quando o plano tem 1 semana; 14 itens (7 de A + 7 de B) quando tem 2-4 semanas',
+      items: SCHEMA_DIA_MODELO_ALIMENTAR,
+    },
+    receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
+    recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
+  },
+  required: ['nome', 'avaliacaoInicial', 'estrategia', 'diasModelo', 'receitas', 'recomendacoesGerais'],
+  additionalProperties: false,
+};
+
+function textoMetasPorDiaSemana(metas) {
+  if (!Array.isArray(metas) || !metas.length) return 'Sem meta calórica calculável (perfil incompleto — peso/altura/idade/sexo faltando).';
+  return JSON.stringify(metas, null, 2);
+}
+
+// Teste real mostrou que 20000 é insuficiente até pro caso mais simples (1 semana-modelo, 3
+// refeições) — a lista de compras (JSON gerado por último) saía truncada/vazia. Valores bem
+// mais altos que a estimativa inicial.
+function maxTokensPlanoAlimentar(semanaModeloB, quantidadeRefeicoes) {
+  const templates = semanaModeloB ? 2 : 1;
+  if (templates === 1) return quantidadeRefeicoes <= 3 ? 40000 : 48000;
+  return quantidadeRefeicoes <= 3 ? 56000 : 64000;
+}
+
+app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
+  if (!requireAI(res)) return;
+  try {
+    const { perfil, tiposRefeicao, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente } = req.body;
+    const semanas = [1, 2, 3, 4].includes(+req.body.semanas) ? +req.body.semanas : 1;
+    const semanaModeloB = semanas >= 2;
+    const repeticoesA = Math.ceil(semanas / 2);
+    const repeticoesB = Math.floor(semanas / 2);
+    const rotulosRefeicao = (Array.isArray(tiposRefeicao) ? tiposRefeicao : []).map((t) => ROTULOS_REFEICAO_PLANO[t] ?? t);
+
+    const user = `# PERSONA
+
+Você é um médico nutrólogo esportivo com mais de 15 anos de experiência em prescrição alimentar focada em objetivo — emagrecimento, hipertrofia, recomposição corporal, performance e saúde metabólica. Você monta cardápios realistas com comida brasileira acessível, nunca dietas genéricas de internet.
+
+# OBJETIVO
+
+Montar um PLANO ALIMENTAR ESTRUTURADO de ${semanas === 1 ? '1 semana' : `${semanas} semanas`}, com quantidades e gramas reais por item — não sugestões vagas.
+
+# ESTRUTURA DO CARDÁPIO
+
+Gere ${semanaModeloB ? 'DUAS semanas-modelo alternadas ("A" e "B")' : 'UMA única semana-modelo ("A")'} — 7 dias cada, dias da semana Segunda a Domingo. NÃO gere um dia único para cada um dos dias do período total; o aplicativo repete/alterna essas semanas-modelo automaticamente ao longo da duração real escolhida.
+${semanaModeloB ? `O template A se repete ${repeticoesA}x e o template B se repete ${repeticoesB}x ao longo das ${semanas} semanas civis do plano (semanas ímpares usam A, pares usam B). Use exatamente esses multiplicadores ao montar a lista de compras agregada.` : ''}
+
+Gere refeições APENAS destes tipos, exatamente estes e nenhum outro: ${rotulosRefeicao.join(', ') || 'nenhum tipo selecionado — não gere nenhuma refeição'}.
+
+# METAS CALÓRICAS POR DIA DA SEMANA (já calculadas pelo app — use como alvo; dias de treino têm meta maior que dias de descanso)
+
+${textoMetasPorDiaSemana(metasPorDiaSemana)}
+
+# NOMES CONSISTENTES (para a lista de compras)
+
+O app monta a lista de compras automaticamente somando as quantidades de "itens" de todas as refeições — ele soma casando pelo nome EXATO, sem adivinhar sinônimos. Por isso, use SEMPRE o mesmo nome e a mesma unidade para o mesmo ingrediente sempre que ele aparecer em refeições diferentes (ex.: sempre "Peito de frango" com unidade "g" em toda refeição que usar esse item — nunca alternar com "Frango grelhado" ou trocar a unidade).
+
+# RECEITAS
+
+Só crie uma receita quando o item exigir preparo com passos reais. Algo como "1 banana + 2 colheres de pasta de amendoim" não precisa de receita — deixe "receitaNome" vazio nesses casos.
+
+## Perfil do aluno
+${perfilTexto(perfil)}
+Observações do aluno para este plano: ${observacoes || 'nenhuma'}
+
+## Treinos recentes (ritmo real de treino)
+${JSON.stringify(sessoesRecentes ?? [], null, 2)}
+
+## Sono e atividade recentes
+${textoAtividadeRecente(atividadeRecente)}`;
+
+    const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
+    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens });
+    res.json({ ...JSON.parse(textoDaResposta(response)), semanas });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: mensagemErro(err) });
+  }
+});
+
 // ---------- Estimativa de calorias dos registros do dia ----------
 const SCHEMA_CALORIAS = {
   type: 'object',
@@ -1038,6 +1236,9 @@ function mensagemErro(err) {
   if (err instanceof Anthropic.BadRequestError && /credit balance/i.test(err?.message || '')) {
     return 'Créditos da conta Anthropic esgotados. Para o Coach voltar a funcionar, adicione créditos em console.anthropic.com → Plans & Billing.';
   }
+  if (/overloaded/i.test(err?.message || '')) {
+    return 'A IA está sobrecarregada agora (instabilidade temporária do lado deles). Tente de novo em alguns instantes.';
+  }
   return 'Erro ao consultar a IA: ' + (err?.message || 'desconhecido');
 }
 
@@ -1126,6 +1327,52 @@ async function verificarRelatorioAutomatico() {
 }
 
 setInterval(verificarRelatorioAutomatico, 60 * 1000);
+
+// ---------- Lembrete push antes do relatório das 22:30 ----------
+// Só notifica quem tem inscrição de push E ainda não teve nenhuma interação hoje (mesmo
+// critério do relatório automático) — não incomoda quem já usou o app normalmente.
+const HORA_LEMBRETE_PUSH = '19:30';
+let ultimoDisparoLembretePush = null;
+
+async function verificarLembretePush() {
+  const hoje = dataSaoPauloISO();
+  if (horaMinutoSaoPaulo() !== HORA_LEMBRETE_PUSH || ultimoDisparoLembretePush === hoje) return;
+  ultimoDisparoLembretePush = hoje;
+
+  const inscricoes = db.prepare('SELECT * FROM push_inscricoes').all();
+  if (!inscricoes.length) return;
+  const porPerfil = new Map();
+  for (const insc of inscricoes) {
+    if (!porPerfil.has(insc.perfil_id)) porPerfil.set(insc.perfil_id, []);
+    porPerfil.get(insc.perfil_id).push(insc);
+  }
+
+  let notificados = 0;
+  for (const [perfilId, inscricoesDoPerfil] of porPerfil) {
+    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+    if (!row) continue;
+    const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
+    const dia = dadosAtual.dias[hoje] ?? { data: hoje, registros: [] };
+    const treinosHoje = dadosAtual.sessoes.filter((s) => dataSaoPauloDe(s.data) === hoje).length;
+    if (teveInteracaoHoje(dadosAtual, dia, treinosHoje, hoje)) continue;
+
+    for (const insc of inscricoesDoPerfil) {
+      try {
+        const ok = await enviarPush(
+          { endpoint: insc.endpoint, keys: { p256dh: insc.p256dh, auth: insc.auth } },
+          { title: 'Meu Coach', body: 'Faltam poucas horas pro resumo do dia e você ainda não registrou nada hoje. Bora?', url: '/' },
+        );
+        if (ok) notificados++;
+        else db.prepare('DELETE FROM push_inscricoes WHERE id = ?').run(insc.id);
+      } catch (err) {
+        console.error(`Falha ao enviar push de lembrete pro perfil ${perfilId}:`, err?.message || err);
+      }
+    }
+  }
+  console.log(`Lembrete push das ${HORA_LEMBRETE_PUSH}: ${notificados} notificação(ões) enviada(s) em ${hoje}.`);
+}
+
+setInterval(verificarLembretePush, 60 * 1000);
 
 // ---------- Arquivos estáticos (produção) ----------
 const dist = path.join(__dirname, '..', 'dist');
