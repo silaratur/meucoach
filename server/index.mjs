@@ -1044,14 +1044,25 @@ function mensagemErro(err) {
 // ---------- Relatório automático das 22:30 (fuso de São Paulo) ----------
 // Garante um relatório consolidado do dia mesmo se o aluno nunca pedir avaliação manual — vira
 // insumo pro planejamento do dia seguinte (déficit/excesso de calorias ou atividade).
+// Sem nenhuma interação hoje (nem refeição, nem treino, nem pesagem/atividade), não há nada
+// novo pra avaliar — gerar mesmo assim só empilha avaliação vazia/repetitiva e gasta crédito de IA.
+function teveInteracaoHoje(dadosAtual, dia, treinosHoje, hoje) {
+  if (dia.registros.length > 0) return true;
+  if (treinosHoje > 0) return true;
+  if (dadosAtual.pesagens.some((p) => dataSaoPauloDe(p.data) === hoje)) return true;
+  if (dadosAtual.atividadesDiarias.some((a) => dataSaoPauloDe(a.data) === hoje)) return true;
+  return false;
+}
+
 async function gerarRelatorioAutomatico(row) {
   const perfil = JSON.parse(row.perfil_json);
   const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
   const hoje = dataSaoPauloISO();
   const dia = dadosAtual.dias[hoje] ?? { data: hoje, registros: [] };
+  const treinosHoje = dadosAtual.sessoes.filter((s) => dataSaoPauloDe(s.data) === hoje).length;
+  if (!teveInteracaoHoje(dadosAtual, dia, treinosHoje, hoje)) return;
 
   const nomeDiaHoje = diaSemanaSaoPaulo();
-  const treinosHoje = dadosAtual.sessoes.filter((s) => dataSaoPauloDe(s.data) === hoje).length;
   const treinoPrevistoHoje = (perfil.diasMusculacao?.includes(nomeDiaHoje) ?? false) || (perfil.diasCorrida?.includes(nomeDiaHoje) ?? false);
   const treinoHoje = treinoPrevistoHoje || treinosHoje > 0;
 
@@ -1092,6 +1103,7 @@ async function gerarRelatorioAutomatico(row) {
     new Date().toISOString(),
     row.id,
   );
+  return true;
 }
 
 let ultimoDisparoRelatorio22h30 = null; // data (yyyy-MM-dd) do último disparo — evita repetir no mesmo minuto/dia
@@ -1102,14 +1114,15 @@ async function verificarRelatorioAutomatico() {
   if (horaMinutoSaoPaulo() !== '22:30' || ultimoDisparoRelatorio22h30 === hoje) return;
   ultimoDisparoRelatorio22h30 = hoje;
   const linhas = db.prepare('SELECT id, perfil_json, dados_json FROM perfis').all();
+  let gerados = 0;
   for (const row of linhas) {
     try {
-      await gerarRelatorioAutomatico(row);
+      if (await gerarRelatorioAutomatico(row)) gerados++;
     } catch (err) {
       console.error(`Falha ao gerar relatório automático das 22:30 para o perfil ${row.id}:`, err?.message || err);
     }
   }
-  console.log(`Relatórios automáticos das 22:30 gerados para ${linhas.length} perfil(is) em ${hoje}.`);
+  console.log(`Relatórios automáticos das 22:30: ${gerados} gerado(s) de ${linhas.length} perfil(is) em ${hoje} (demais sem interação hoje).`);
 }
 
 setInterval(verificarRelatorioAutomatico, 60 * 1000);
