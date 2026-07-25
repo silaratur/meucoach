@@ -128,3 +128,17 @@ export function totaisDoDia(registros) {
   }
   return t;
 }
+
+// Espelha streakDias de src/calc.ts, mas usando data de São Paulo (o cliente usa data local do
+// navegador, o que não faz sentido pra um job de servidor) — mesma lógica de sequência de dias.
+export function streakDias(sessoes) {
+  const diasComSessao = new Set((sessoes ?? []).map((s) => dataSaoPauloDe(s.data)));
+  let cursorMs = Date.now();
+  if (!diasComSessao.has(dataSaoPauloISO(new Date(cursorMs)))) cursorMs -= 24 * 60 * 60 * 1000;
+  let streak = 0;
+  while (diasComSessao.has(dataSaoPauloISO(new Date(cursorMs)))) {
+    streak++;
+    cursorMs -= 24 * 60 * 60 * 1000;
+  }
+  return streak;
+}

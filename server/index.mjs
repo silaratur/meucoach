@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
-import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, totaisDoDia } from './calc.mjs';
+import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
 import { buscarMusculoExercicio } from './wger.mjs';
 import { VAPID, enviarPush } from './push.mjs';
 
@@ -125,20 +125,34 @@ app.post('/api/push/cancelar', autenticar, (req, res) => {
   res.json({ ok: true });
 });
 
+// Manda um payload pra TODAS as inscrições de um perfil (pode ter mais de um aparelho) — usado
+// pelo lembrete diário, pelo aviso de plano concluído, pelo relatório pronto e pelo teste manual.
+// Remove do banco qualquer inscrição que o navegador já revogou (enviarPush retorna false nesse caso).
+async function enviarPushParaPerfil(perfilId, payload) {
+  const inscricoes = db.prepare('SELECT * FROM push_inscricoes WHERE perfil_id = ?').all(perfilId);
+  let enviados = 0;
+  for (const insc of inscricoes) {
+    try {
+      const ok = await enviarPush({ endpoint: insc.endpoint, keys: { p256dh: insc.p256dh, auth: insc.auth } }, payload);
+      if (ok) enviados++;
+      else db.prepare('DELETE FROM push_inscricoes WHERE id = ?').run(insc.id);
+    } catch (err) {
+      console.error(`Falha ao enviar push pro perfil ${perfilId}:`, err?.message || err);
+    }
+  }
+  return enviados;
+}
+
 // Envia um push imediato pro próprio aparelho — só pra a pessoa confirmar que a permissão e a
 // inscrição estão funcionando de verdade, sem precisar esperar o horário do lembrete automático.
 app.post('/api/push/testar', autenticar, async (req, res) => {
-  const inscricoes = db.prepare('SELECT * FROM push_inscricoes WHERE perfil_id = ?').all(req.perfilId);
-  if (!inscricoes.length) return res.status(404).json({ error: 'Nenhuma inscrição de push encontrada. Ative os lembretes primeiro.' });
-  let enviados = 0;
-  for (const insc of inscricoes) {
-    const ok = await enviarPush(
-      { endpoint: insc.endpoint, keys: { p256dh: insc.p256dh, auth: insc.auth } },
-      { title: 'Meu Coach', body: 'Notificação de teste — se você está vendo isso, os lembretes estão funcionando!', url: '/' },
-    );
-    if (ok) enviados++;
-    else db.prepare('DELETE FROM push_inscricoes WHERE id = ?').run(insc.id);
-  }
+  const temInscricao = db.prepare('SELECT 1 FROM push_inscricoes WHERE perfil_id = ?').get(req.perfilId);
+  if (!temInscricao) return res.status(404).json({ error: 'Nenhuma inscrição de push encontrada. Ative os lembretes primeiro.' });
+  const enviados = await enviarPushParaPerfil(req.perfilId, {
+    title: 'Meu Coach',
+    body: 'Notificação de teste — se você está vendo isso, os lembretes estão funcionando!',
+    url: '/',
+  });
   res.json({ ok: enviados > 0 });
 });
 
@@ -161,13 +175,44 @@ app.put('/api/perfil', autenticar, (req, res) => {
   res.json({ ok: true });
 });
 
+function planoEstaCompleto(plano) {
+  return !!plano?.dias?.length && (plano.concluidos?.length ?? 0) >= plano.dias.length;
+}
+
+// Comemoração que hoje só existe como banner client-side (só aparece se a pessoa reabrir aquela
+// aba depois de marcar o último dia) — comparando o dados_json de antes e depois do save, dá pra
+// pegar exatamente o momento em que o plano passa de "não completo" pra "completo" e avisar por
+// push, sem precisar de nenhum estado novo (a própria comparação evita notificar de novo depois).
+async function notificarPlanoConcluidoDe(perfilId, planoAntes, planoDepois, rotulo) {
+  if (!planoDepois || planoAntes?.id !== planoDepois.id) return;
+  if (planoEstaCompleto(planoAntes) || !planoEstaCompleto(planoDepois)) return;
+  await enviarPushParaPerfil(perfilId, {
+    title: 'Meu Coach',
+    body: `Você concluiu seu plano de ${rotulo}! Hora de gerar o próximo ciclo.`,
+    url: '/',
+  });
+}
+
+async function notificarPlanosConcluidos(perfilId, dadosAntes, dadosDepois) {
+  const antes = { ...DADOS_VAZIOS, ...dadosAntes };
+  const depois = { ...DADOS_VAZIOS, ...dadosDepois };
+  await notificarPlanoConcluidoDe(perfilId, antes.planosMusculacao[0], depois.planosMusculacao[0], 'musculação');
+  await notificarPlanoConcluidoDe(perfilId, antes.planosCorrida[0], depois.planosCorrida[0], 'corrida');
+}
+
 app.put('/api/dados', autenticar, (req, res) => {
   const agora = new Date().toISOString();
+  const linhaAntes = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(req.perfilId);
   const info = db
     .prepare('UPDATE perfis SET dados_json = ?, atualizado_em = ? WHERE id = ?')
     .run(JSON.stringify(req.body ?? {}), agora, req.perfilId);
   if (info.changes === 0) return res.status(404).json({ error: 'Conta não encontrada.' });
   res.json({ ok: true });
+  if (linhaAntes) {
+    notificarPlanosConcluidos(req.perfilId, JSON.parse(linhaAntes.dados_json), req.body ?? {}).catch((err) =>
+      console.error(`Falha ao verificar conclusão de plano pro perfil ${req.perfilId}:`, err?.message || err),
+    );
+  }
 });
 
 app.delete('/api/perfil', autenticar, (req, res) => {
@@ -1304,6 +1349,11 @@ async function gerarRelatorioAutomatico(row) {
     new Date().toISOString(),
     row.id,
   );
+  await enviarPushParaPerfil(row.id, {
+    title: 'Meu Coach',
+    body: 'Seu relatório do dia já está pronto — vê como foi seu dia hoje.',
+    url: '/',
+  });
   return true;
 }
 
@@ -1330,7 +1380,23 @@ setInterval(verificarRelatorioAutomatico, 60 * 1000);
 
 // ---------- Lembrete push antes do relatório das 22:30 ----------
 // Só notifica quem tem inscrição de push E ainda não teve nenhuma interação hoje (mesmo
-// critério do relatório automático) — não incomoda quem já usou o app normalmente.
+// critério do relatório automático) — não incomoda quem já usou o app normalmente. A mensagem
+// se adapta ao contexto: dia de treino perdido e/ou sequência (streak) em risco pesam mais do
+// que o aviso genérico de "resumo do dia", já que dão um motivo concreto pra abrir o app agora.
+function mensagemLembrete(diaDeTreinoHoje, streak) {
+  const streakTexto = `${streak} ${streak === 1 ? 'dia' : 'dias'}`;
+  if (diaDeTreinoHoje && streak > 0) {
+    return `Hoje é dia de treino e sua sequência de ${streakTexto} está em risco — bora manter?`;
+  }
+  if (diaDeTreinoHoje) {
+    return 'Hoje é dia de treino programado e você ainda não treinou. Ainda dá tempo!';
+  }
+  if (streak > 0) {
+    return `Sua sequência de ${streakTexto} corre risco se você não fizer nada até o fim do dia.`;
+  }
+  return 'Faltam poucas horas pro resumo do dia e você ainda não registrou nada hoje. Bora?';
+}
+
 const HORA_LEMBRETE_PUSH = '19:30';
 let ultimoDisparoLembretePush = null;
 
@@ -1339,35 +1405,27 @@ async function verificarLembretePush() {
   if (horaMinutoSaoPaulo() !== HORA_LEMBRETE_PUSH || ultimoDisparoLembretePush === hoje) return;
   ultimoDisparoLembretePush = hoje;
 
-  const inscricoes = db.prepare('SELECT * FROM push_inscricoes').all();
-  if (!inscricoes.length) return;
-  const porPerfil = new Map();
-  for (const insc of inscricoes) {
-    if (!porPerfil.has(insc.perfil_id)) porPerfil.set(insc.perfil_id, []);
-    porPerfil.get(insc.perfil_id).push(insc);
-  }
+  const perfisComInscricao = db.prepare('SELECT DISTINCT perfil_id FROM push_inscricoes').all();
+  if (!perfisComInscricao.length) return;
+  const nomeDiaHoje = diaSemanaSaoPaulo();
 
   let notificados = 0;
-  for (const [perfilId, inscricoesDoPerfil] of porPerfil) {
-    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+  for (const { perfil_id: perfilId } of perfisComInscricao) {
+    const row = db.prepare('SELECT perfil_json, dados_json FROM perfis WHERE id = ?').get(perfilId);
     if (!row) continue;
+    const perfil = JSON.parse(row.perfil_json);
     const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
     const dia = dadosAtual.dias[hoje] ?? { data: hoje, registros: [] };
     const treinosHoje = dadosAtual.sessoes.filter((s) => dataSaoPauloDe(s.data) === hoje).length;
     if (teveInteracaoHoje(dadosAtual, dia, treinosHoje, hoje)) continue;
 
-    for (const insc of inscricoesDoPerfil) {
-      try {
-        const ok = await enviarPush(
-          { endpoint: insc.endpoint, keys: { p256dh: insc.p256dh, auth: insc.auth } },
-          { title: 'Meu Coach', body: 'Faltam poucas horas pro resumo do dia e você ainda não registrou nada hoje. Bora?', url: '/' },
-        );
-        if (ok) notificados++;
-        else db.prepare('DELETE FROM push_inscricoes WHERE id = ?').run(insc.id);
-      } catch (err) {
-        console.error(`Falha ao enviar push de lembrete pro perfil ${perfilId}:`, err?.message || err);
-      }
-    }
+    const diaDeTreinoHoje = (perfil.diasMusculacao?.includes(nomeDiaHoje) ?? false) || (perfil.diasCorrida?.includes(nomeDiaHoje) ?? false);
+    const streak = streakDias(dadosAtual.sessoes);
+    notificados += await enviarPushParaPerfil(perfilId, {
+      title: 'Meu Coach',
+      body: mensagemLembrete(diaDeTreinoHoje, streak),
+      url: '/',
+    });
   }
   console.log(`Lembrete push das ${HORA_LEMBRETE_PUSH}: ${notificados} notificação(ões) enviada(s) em ${hoje}.`);
 }
