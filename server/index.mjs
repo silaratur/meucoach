@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
-import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
+import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, diasDesde, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
 import { buscarMusculoExercicio } from './wger.mjs';
 import { VAPID, enviarPush } from './push.mjs';
 
@@ -193,24 +193,51 @@ async function notificarPlanoConcluidoDe(perfilId, planoAntes, planoDepois, rotu
   });
 }
 
-async function notificarPlanosConcluidos(perfilId, dadosAntes, dadosDepois) {
+// Mesma ideia de "peso alvo batido, cadê a comemoração" que já existia pra plano concluído: a
+// aba Evolução só mostra isso como frase passiva na tela. Comparando o peso mais recente de
+// antes/depois do save contra pesoMetaKg, dá pra pegar o momento exato em que a meta é batida.
+function metaDePesoAtingida(pesoInicial, pesoMetaKg, pesoAtual) {
+  if (pesoInicial == null || pesoMetaKg == null || pesoAtual == null || pesoInicial === pesoMetaKg) return false;
+  const perdendoPeso = pesoMetaKg < pesoInicial;
+  return perdendoPeso ? pesoAtual <= pesoMetaKg : pesoAtual >= pesoMetaKg;
+}
+
+async function notificarMetaPeso(perfilId, pesoMetaKg, dadosAntes, dadosDepois) {
+  if (pesoMetaKg == null) return;
+  const pesagensAntes = [...(dadosAntes.pesagens ?? [])].sort((a, b) => a.data.localeCompare(b.data));
+  const pesagensDepois = [...(dadosDepois.pesagens ?? [])].sort((a, b) => a.data.localeCompare(b.data));
+  if (!pesagensDepois.length) return;
+  const pesoInicial = pesagensDepois[0].pesoKg;
+  const pesoAntes = pesagensAntes.at(-1)?.pesoKg;
+  const pesoDepois = pesagensDepois.at(-1).pesoKg;
+  if (metaDePesoAtingida(pesoInicial, pesoMetaKg, pesoAntes)) return; // já tinha batido antes — não repete
+  if (!metaDePesoAtingida(pesoInicial, pesoMetaKg, pesoDepois)) return; // ainda não bateu agora
+  await enviarPushParaPerfil(perfilId, {
+    title: 'Meu Coach',
+    body: `Parabéns! Você atingiu sua meta de ${pesoMetaKg} kg!`,
+    url: '/',
+  });
+}
+
+async function notificarPlanosConcluidos(perfilId, perfilJson, dadosAntes, dadosDepois) {
   const antes = { ...DADOS_VAZIOS, ...dadosAntes };
   const depois = { ...DADOS_VAZIOS, ...dadosDepois };
   await notificarPlanoConcluidoDe(perfilId, antes.planosMusculacao[0], depois.planosMusculacao[0], 'musculação');
   await notificarPlanoConcluidoDe(perfilId, antes.planosCorrida[0], depois.planosCorrida[0], 'corrida');
+  await notificarMetaPeso(perfilId, perfilJson?.pesoMetaKg, antes, depois);
 }
 
 app.put('/api/dados', autenticar, (req, res) => {
   const agora = new Date().toISOString();
-  const linhaAntes = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(req.perfilId);
+  const linhaAntes = db.prepare('SELECT perfil_json, dados_json FROM perfis WHERE id = ?').get(req.perfilId);
   const info = db
     .prepare('UPDATE perfis SET dados_json = ?, atualizado_em = ? WHERE id = ?')
     .run(JSON.stringify(req.body ?? {}), agora, req.perfilId);
   if (info.changes === 0) return res.status(404).json({ error: 'Conta não encontrada.' });
   res.json({ ok: true });
   if (linhaAntes) {
-    notificarPlanosConcluidos(req.perfilId, JSON.parse(linhaAntes.dados_json), req.body ?? {}).catch((err) =>
-      console.error(`Falha ao verificar conclusão de plano pro perfil ${req.perfilId}:`, err?.message || err),
+    notificarPlanosConcluidos(req.perfilId, JSON.parse(linhaAntes.perfil_json), JSON.parse(linhaAntes.dados_json), req.body ?? {}).catch((err) =>
+      console.error(`Falha ao verificar conquistas pro perfil ${req.perfilId}:`, err?.message || err),
     );
   }
 });
@@ -1431,6 +1458,97 @@ async function verificarLembretePush() {
 }
 
 setInterval(verificarLembretePush, 60 * 1000);
+
+// ---------- Avisos periódicos (pesagem atrasada, inatividade prolongada, dieta vencida) ----------
+// Diferente do lembrete das 19:30 (que é sobre HOJE), estes são sobre padrões de vários dias —
+// por isso rodam num horário próprio e usam push_marcadores pra não repetir o mesmo aviso todo
+// dia (cooldown pra reengajamento, dedup permanente por plano pra dieta vencida).
+function jaNotificadoRecentemente(perfilId, tipo, dentroDeDias) {
+  const row = db.prepare('SELECT enviado_em FROM push_marcadores WHERE perfil_id = ? AND tipo = ?').get(perfilId, tipo);
+  if (!row) return false;
+  if (dentroDeDias == null) return true; // marcador existe = já avisado (dedup permanente, ex.: 1x por plano)
+  const dias = Math.round((Date.now() - new Date(row.enviado_em).getTime()) / (24 * 60 * 60 * 1000));
+  return dias < dentroDeDias;
+}
+
+function marcarNotificado(perfilId, tipo) {
+  db.prepare(
+    `INSERT INTO push_marcadores (perfil_id, tipo, enviado_em) VALUES (?, ?, ?)
+     ON CONFLICT(perfil_id, tipo) DO UPDATE SET enviado_em = excluded.enviado_em`,
+  ).run(perfilId, tipo, new Date().toISOString());
+}
+
+// Data mais recente de QUALQUER sinal de uso (refeição, treino, pesagem, atividade) — diferente
+// de teveInteracaoHoje (que só olha hoje), isso mede há quantos dias a pessoa realmente parou.
+function diasDesdeUltimaInteracao(dadosAtual, hoje) {
+  const datas = [];
+  for (const dia of Object.values(dadosAtual.dias ?? {})) if (dia.registros?.length) datas.push(dia.data);
+  for (const s of dadosAtual.sessoes ?? []) datas.push(dataSaoPauloDe(s.data));
+  for (const p of dadosAtual.pesagens ?? []) datas.push(p.data);
+  for (const a of dadosAtual.atividadesDiarias ?? []) datas.push(a.data);
+  return diasDesde(datas, hoje);
+}
+
+const HORA_AVISOS_PERIODICOS = '09:00';
+let ultimoDisparoAvisosPeriodicos = null;
+
+async function verificarAvisosPeriodicos() {
+  const hoje = dataSaoPauloISO();
+  if (horaMinutoSaoPaulo() !== HORA_AVISOS_PERIODICOS || ultimoDisparoAvisosPeriodicos === hoje) return;
+  ultimoDisparoAvisosPeriodicos = hoje;
+
+  const perfisComInscricao = db.prepare('SELECT DISTINCT perfil_id FROM push_inscricoes').all();
+  if (!perfisComInscricao.length) return;
+  const ehSegunda = diaSemanaSaoPaulo() === 'Segunda';
+
+  let notificados = 0;
+  for (const { perfil_id: perfilId } of perfisComInscricao) {
+    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+    if (!row) continue;
+    const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
+
+    // Pesagem atrasada — só quem já pesou alguma vez, checado 1x por semana (não precisa de
+    // marcador: o próprio "só na segunda" já garante o intervalo).
+    if (ehSegunda && dadosAtual.pesagens.length && diasDesde(dadosAtual.pesagens.map((p) => p.data), hoje) >= 7) {
+      notificados += await enviarPushParaPerfil(perfilId, {
+        title: 'Meu Coach',
+        body: 'Já faz mais de uma semana desde sua última pesagem — bora registrar hoje?',
+        url: '/',
+      });
+    }
+
+    // Dieta vencida — o plano ativo já devia ter acabado (criadoEm + semanas) e ainda não avisamos
+    // sobre ESSE plano especificamente (dedup permanente por id, reseta ao gerar um plano novo).
+    const planoAlimentar = dadosAtual.planosAlimentares[0];
+    if (planoAlimentar) {
+      const tipoMarcador = `dieta-vencida:${planoAlimentar.id}`;
+      const diasDeVigencia = (planoAlimentar.semanas ?? 1) * 7;
+      if (diasDesde([planoAlimentar.criadoEm.slice(0, 10)], hoje) >= diasDeVigencia && !jaNotificadoRecentemente(perfilId, tipoMarcador)) {
+        notificados += await enviarPushParaPerfil(perfilId, {
+          title: 'Meu Coach',
+          body: `Seu plano alimentar de ${planoAlimentar.semanas === 1 ? '1 semana' : `${planoAlimentar.semanas} semanas`} já deve ter terminado — hora de gerar um novo cardápio?`,
+          url: '/',
+        });
+        marcarNotificado(perfilId, tipoMarcador);
+      }
+    }
+
+    // Reengajamento — inatividade real de vários dias, não só "hoje". Cooldown de 4 dias pra não
+    // martelar todo dia quem realmente parou de usar o app.
+    const diasInativo = diasDesdeUltimaInteracao(dadosAtual, hoje);
+    if (diasInativo >= 3 && diasInativo !== Infinity && !jaNotificadoRecentemente(perfilId, 'reengajamento', 4)) {
+      notificados += await enviarPushParaPerfil(perfilId, {
+        title: 'Meu Coach',
+        body: `Já faz ${diasInativo} dias que você não usa o Meu Coach — que tal retomar hoje?`,
+        url: '/',
+      });
+      marcarNotificado(perfilId, 'reengajamento');
+    }
+  }
+  console.log(`Avisos periódicos das ${HORA_AVISOS_PERIODICOS}: ${notificados} notificação(ões) enviada(s) em ${hoje}.`);
+}
+
+setInterval(verificarAvisosPeriodicos, 60 * 1000);
 
 // ---------- Arquivos estáticos (produção) ----------
 const dist = path.join(__dirname, '..', 'dist');

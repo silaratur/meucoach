@@ -129,6 +129,16 @@ export function totaisDoDia(registros) {
   return t;
 }
 
+// Dias entre a data mais recente de uma lista (yyyy-MM-dd, já em fuso local — não precisa
+// converter de novo) e hoje. Sem nenhuma data, retorna Infinity (nunca aconteceu, "há tempo
+// demais" por definição) — quem chama decide se isso deve ou não disparar um aviso.
+export function diasDesde(datasYYYYMMDD, hoje) {
+  if (!datasYYYYMMDD?.length) return Infinity;
+  const maisRecente = [...datasYYYYMMDD].sort().at(-1);
+  const diffMs = new Date(`${hoje}T00:00:00`) - new Date(`${maisRecente}T00:00:00`);
+  return Math.round(diffMs / (24 * 60 * 60 * 1000));
+}
+
 // Espelha streakDias de src/calc.ts, mas usando data de São Paulo (o cliente usa data local do
 // navegador, o que não faz sentido pra um job de servidor) — mesma lógica de sequência de dias.
 export function streakDias(sessoes) {

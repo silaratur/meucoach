@@ -68,6 +68,16 @@ CREATE TABLE IF NOT EXISTS push_inscricoes (
 );
 CREATE INDEX IF NOT EXISTS idx_push_perfil ON push_inscricoes(perfil_id);
 
+-- Marca a última vez que um TIPO de push periódico (não os disparados por evento, esses já se
+-- auto-controlam comparando antes/depois) foi enviado pra um perfil — evita repetir avisos como
+-- "reengajamento" todo dia, ou mandar "plano venceu" de novo pro mesmo plano já avisado.
+CREATE TABLE IF NOT EXISTS push_marcadores (
+  perfil_id TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  enviado_em TEXT NOT NULL,
+  PRIMARY KEY (perfil_id, tipo)
+);
+
 -- Tabela órfã: era o status da assinatura mensal via Mercado Pago (removida — o app voltou a
 -- ser gratuito, com doação Pix opcional em vez de cobrança automática). Mantida só porque já
 -- tem dado real de teste em produção; não é lida nem escrita por nenhum código atual.
