@@ -434,7 +434,7 @@ function textoDaResposta(response) {
   return block ? block.text : '';
 }
 
-async function chamarIA(userContent, { schema, maxTokens = 8000 } = {}) {
+async function chamarIA(userContent, { schema, maxTokens = 8000, res } = {}) {
   const req = {
     model: MODEL,
     max_tokens: maxTokens,
@@ -445,10 +445,27 @@ async function chamarIA(userContent, { schema, maxTokens = 8000 } = {}) {
   if (schema) {
     req.output_config = { format: { type: 'json_schema', schema } };
   }
-  // Respostas grandes (planos de várias semanas) arriscam timeout sem streaming.
+  // Respostas grandes (planos de várias semanas) arriscam timeout sem streaming — e mesmo com
+  // streaming DO LADO da Anthropic, o cliente HTTP (navegador) não recebe nenhum byte enquanto
+  // `finalMessage()` espera a resposta completa. Se a geração passar de ~1-2 min sem nenhum
+  // dado trafegando, proxies e redes móveis derrubam a conexão por inatividade — o servidor
+  // nem chega a notar (segue gerando normalmente), mas o app já recebeu "failed to fetch". Um
+  // `res` opcional permite manter a conexão viva escrevendo espaços em branco periodicamente
+  // (JSON válido tolera espaço em branco no início/fim, então não quebra o parse no final).
   if (maxTokens > 12000) {
-    const stream = client.messages.stream(req);
-    return stream.finalMessage();
+    let heartbeat;
+    if (res) {
+      res.setHeader('Content-Type', 'application/json');
+      heartbeat = setInterval(() => {
+        try { res.write(' '); } catch { /* conexão já pode ter caído */ }
+      }, 15000);
+    }
+    try {
+      const stream = client.messages.stream(req);
+      return await stream.finalMessage();
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
   }
   return client.messages.create(req);
 }
@@ -813,11 +830,12 @@ ${JSON.stringify(planoCorridaResumo ?? { info: 'não tem plano de corrida' }, nu
 
 Gere os dias de treino para ${periodo} completa(s), APENAS nos dias da semana que o aluno marcou para musculação (ver "Dias preferidos para musculação" no perfil). Se ele não marcou dias, use uma frequência de 3x/semana em dias alternados (Segunda/Quarta/Sexta). Cada exercício deve ter "instrucoes" ensinando a execução correta (postura, amplitude completa, respiração, velocidade) e "dicaRapida" para reforço durante a série.`;
     const maxTokens = semanas <= 1 ? 16000 : semanas === 2 ? 28000 : 48000;
-    const response = await chamarIA(user, { schema: SCHEMA_PLANO_MENSAL, maxTokens });
-    res.json({ ...JSON.parse(textoDaResposta(response)), semanas });
+    const response = await chamarIA(user, { schema: SCHEMA_PLANO_MENSAL, maxTokens, res });
+    res.end(JSON.stringify({ ...JSON.parse(textoDaResposta(response)), semanas }));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: mensagemErro(err) });
+    if (res.headersSent) res.end();
+    else res.status(500).json({ error: mensagemErro(err) });
   }
 });
 
@@ -938,10 +956,11 @@ corrida vai tocar "1 etapa por vez"; a pessoa não lê nada, só ouve.
 - "etapas" deve ser fiel ao que está descrito em "detalhes" — são duas representações do mesmo
   treino, não podem se contradizer.
 - Dias de descanso: "etapas": [].`;
-    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 24000 });
-    res.json(JSON.parse(textoDaResposta(response)));
+    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 24000, res });
+    res.end(textoDaResposta(response));
   } catch (err) {
     console.error(err);
+    if (res.headersSent) return res.end();
     res.status(500).json({ error: mensagemErro(err) });
   }
 });
@@ -1096,10 +1115,11 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ${textoAtividadeRecente(atividadeRecente)}`;
 
     const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
-    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens });
-    res.json({ ...JSON.parse(textoDaResposta(response)), semanas });
+    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens, res });
+    res.end(JSON.stringify({ ...JSON.parse(textoDaResposta(response)), semanas }));
   } catch (err) {
     console.error(err);
+    if (res.headersSent) return res.end();
     res.status(500).json({ error: mensagemErro(err) });
   }
 });
