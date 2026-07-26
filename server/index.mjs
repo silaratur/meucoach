@@ -1301,6 +1301,78 @@ ${perfilTexto(perfil)}`,
   }
 });
 
+const SCHEMA_CORRIDA_FOTO = {
+  type: 'object',
+  properties: {
+    ehResumoCorrida: {
+      type: 'boolean',
+      description: 'false se a imagem não mostra um resumo de corrida/exercício com distância e tempo, ou está ilegível',
+    },
+    data: { type: 'string', description: 'Data (yyyy-MM-dd) lida da tela, se visível; senão, deixe ""' },
+    distanciaKm: { type: 'number' },
+    duracaoMin: { type: 'number' },
+    ritmoMinKm: {
+      type: 'number',
+      description: 'Ritmo médio em minutos por km. Se a tela só mostrar velocidade (km/h), converta (60 / velocidadeKmH).',
+    },
+    velocidadeKmH: {
+      type: 'number',
+      description: 'Velocidade média em km/h. Se a tela só mostrar ritmo (min/km), converta (60 / ritmoMinKm).',
+    },
+    calorias: { type: 'integer' },
+    frequenciaCardiacaMedia: { type: 'integer', description: '0 se não estiver visível na tela' },
+    comentario: {
+      type: 'string',
+      description:
+        'Análise de treinador de corrida (2-3 frases): o que esse desempenho (ritmo, distância) indica pro objetivo do aluno, e uma recomendação prática pro próximo treino.',
+    },
+  },
+  required: [
+    'ehResumoCorrida',
+    'data',
+    'distanciaKm',
+    'duracaoMin',
+    'ritmoMinKm',
+    'velocidadeKmH',
+    'calorias',
+    'frequenciaCardiacaMedia',
+    'comentario',
+  ],
+  additionalProperties: false,
+};
+
+app.post('/api/ai/corrida-foto', autenticar, async (req, res) => {
+  if (!requireAI(res)) return;
+  try {
+    const { perfil, imagemBase64, mediaType } = req.body;
+    if (!imagemBase64) {
+      res.status(400).json({ error: 'Nenhuma imagem recebida.' });
+      return;
+    }
+    const response = await chamarIA(
+      [
+        { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imagemBase64 } },
+        {
+          type: 'text',
+          text: `Você é o treinador de corrida deste aluno, analisando uma foto/frame de vídeo do resumo de uma corrida no relógio ou app dele (Samsung Health, Strava, Garmin ou similar) — a tela mostra distância, tempo e ritmo/velocidade medidos por GPS dedicado, mais preciso que o GPS de celular. Leia os números visíveis e a data se estiver na tela. Se a imagem não mostrar um resumo desse tipo (com pelo menos distância e tempo) ou estiver ilegível, marque ehResumoCorrida=false e explique em "comentario".
+
+Preencha ritmoMinKm E velocidadeKmH sempre que possível, convertendo um a partir do outro quando a tela só mostrar um dos dois.
+
+Sua análise em "comentario" deve ser de TREINADOR: o que esse desempenho indica pro objetivo do aluno, e uma recomendação prática pro próximo treino de corrida — essa informação é parte integrada do programa.
+
+## Perfil do aluno
+${perfilTexto(perfil)}`,
+        },
+      ],
+      { schema: SCHEMA_CORRIDA_FOTO },
+    );
+    res.json(JSON.parse(textoDaResposta(response)));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: mensagemErro(err) });
+  }
+});
+
 function mensagemErro(err) {
   if (err instanceof Anthropic.AuthenticationError) return 'Chave da API inválida. Verifique o .env.';
   if (err instanceof Anthropic.RateLimitError) return 'Limite de uso atingido. Tente de novo em instantes.';

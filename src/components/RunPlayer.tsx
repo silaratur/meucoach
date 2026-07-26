@@ -71,7 +71,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
   const [segundos, setSegundos] = useState(0);
   const [gpsOk, setGpsOk] = useState<'aguardando' | 'ok' | 'erro'>('aguardando');
 
-  const ultimaPosRef = useRef<GeolocationCoordinates | null>(null);
+  const ultimaPosRef = useRef<GeolocationPosition | null>(null);
   const watchRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const proximoAnuncioRef = useRef(500); // anuncia a cada 500 m
@@ -114,10 +114,16 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     const c = pos.coords;
     if (c.accuracy > 35) return; // sinal ruim — ignora
     const anterior = ultimaPosRef.current;
-    ultimaPosRef.current = c;
+    ultimaPosRef.current = pos;
     if (!anterior) return;
-    const passo = distanciaM(anterior, c);
-    if (passo < 1 || passo > 120) return; // parado ou salto de GPS
+    const passo = distanciaM(anterior.coords, c);
+    const segundosEntrePontos = (pos.timestamp - anterior.timestamp) / 1000;
+    if (passo < 1) return; // parado
+    // Velocidade implícita acima de ~36 km/h é humanamente impossível numa corrida — descarta
+    // como salto de GPS em vez de só limitar a distância (um salto rápido de poucos metros
+    // também é ruído e passava despercebido só checando distância, inflando o total da corrida).
+    const velocidadeImplicitaMs = segundosEntrePontos > 0 ? passo / segundosEntrePontos : Infinity;
+    if (velocidadeImplicitaMs > 10) return;
     distRef.current += passo;
     setDistM(distRef.current);
     if (distRef.current >= proximoAnuncioRef.current) {

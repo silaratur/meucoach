@@ -2,10 +2,14 @@ import { useState } from 'react';
 import type { DadosPerfil, Perfil, PlanoCorrida, SessaoTreino } from '../types';
 import { DIAS_SEMANA } from '../types';
 import { uid } from '../storage';
-import { gerarPlanoCorrida } from '../api';
+import { gerarPlanoCorrida, analisarCorridaFoto } from '../api';
+import type { MediaRef } from '../media';
+import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
+import { MediaPicker } from './Midia';
 import RunPlayer from './RunPlayer';
+import Markdown from './Markdown';
 import { IconeComecar, IconeExcluir, IconeCorrida, IconeAvaliacao, IconeMusculacao, IconeCoach, IconeDica } from './Icones';
-import { Zap, CalendarDays } from 'lucide-react';
+import { Zap, CalendarDays, Watch } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -104,6 +108,53 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
     setCorrendo(null);
   }
 
+  // ----- Importar corrida do relógio (foto do resumo) — GPS dedicado é mais preciso que o do celular -----
+  const [analisandoImportacao, setAnalisandoImportacao] = useState(false);
+  const [resumoImportacao, setResumoImportacao] = useState('');
+  const [erroImportacao, setErroImportacao] = useState('');
+
+  async function base64DeMidia(ref: MediaRef): Promise<{ base64: string; mediaType: string }> {
+    const blob = await obterMidia(ref.id);
+    if (!blob) throw new Error('Mídia não encontrada.');
+    if (ref.tipo === 'video') return extrairFrameDeVideo(blob);
+    return { base64: await blobParaBase64(blob), mediaType: blob.type || 'image/jpeg' };
+  }
+
+  async function importarCorridaFoto(ref: MediaRef) {
+    setAnalisandoImportacao(true);
+    setErroImportacao('');
+    setResumoImportacao('');
+    try {
+      const { base64, mediaType } = await base64DeMidia(ref);
+      const r = await analisarCorridaFoto(perfil, base64, mediaType);
+      excluirMidias([ref]);
+      if (!r.ehResumoCorrida || r.distanciaKm <= 0 || r.duracaoMin <= 0) {
+        setErroImportacao(r.comentario || 'Não consegui ler um resumo de corrida nessa foto.');
+        return;
+      }
+      const distanciaKm = Math.round(r.distanciaKm * 100) / 100;
+      const duracaoMin = Math.round(r.duracaoMin);
+      const ritmoMinKm = r.ritmoMinKm > 0 ? Math.round(r.ritmoMinKm * 100) / 100 : undefined;
+      const velocidadeKmH = r.velocidadeKmH > 0 ? Math.round(r.velocidadeKmH * 10) / 10 : undefined;
+      const sessao: SessaoTreino = {
+        id: uid(),
+        nomeTreino: `Corrida ${distanciaKm} km (importada do relógio)`,
+        local: 'rua',
+        data: r.data ? `${r.data}T12:00:00.000Z` : new Date().toISOString(),
+        duracaoMin,
+        itens: [],
+        atividadeLivre: `Corrida de ${distanciaKm} km em ${duracaoMin} min${ritmoMinKm ? ` (ritmo ${Math.floor(ritmoMinKm)}:${String(Math.round((ritmoMinKm % 1) * 60)).padStart(2, '0')}/km · ${velocidadeKmH ?? '—'} km/h)` : ''} — dados do relógio.`,
+        corrida: { distanciaKm, duracaoMin, ritmoMinKm, velocidadeKmH },
+      };
+      atualizar((d) => ({ ...d, sessoes: [sessao, ...d.sessoes] }));
+      setResumoImportacao(r.comentario);
+    } catch (err) {
+      setErroImportacao((err as Error).message);
+    } finally {
+      setAnalisandoImportacao(false);
+    }
+  }
+
   if (correndo !== null) {
     return (
       <RunPlayer
@@ -124,6 +175,19 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
         <h2><IconeCorrida size={19} /> Correr agora</h2>
         <p className="meta-texto">GPS + coach por voz: distância, ritmo e incentivo a cada 500 metros.</p>
         <button className="primario grande" onClick={() => setCorrendo('')}><IconeComecar size={17} /> Iniciar corrida livre</button>
+      </div>
+
+      <div className="cartao">
+        <h2><Watch size={19} /> Importar corrida do relógio</h2>
+        <p className="meta-texto">
+          Correu com Galaxy Watch, Garmin, Strava ou similar? Tire uma foto (ou vídeo) da tela de resumo da
+          corrida — o GPS do relógio é mais preciso que o do celular, e o Coach lê a distância, o tempo e o
+          ritmo direto de lá.
+        </p>
+        <MediaPicker tipos={['foto', 'video']} aoAdicionar={importarCorridaFoto} />
+        {analisandoImportacao && <p className="vazio"><IconeCoach size={14} /> Lendo o resumo da corrida...</p>}
+        {resumoImportacao && <div className="leitura-balanca"><Markdown texto={resumoImportacao} /></div>}
+        {erroImportacao && <p className="erro">{erroImportacao}</p>}
       </div>
 
       {!plano && (

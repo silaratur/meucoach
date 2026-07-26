@@ -119,6 +119,22 @@ export function analisarAtividadeFoto(perfil: Perfil, imagemBase64: string, medi
   return post<LeituraAtividadeFoto>('/api/ai/atividade-foto', { perfil, imagemBase64, mediaType });
 }
 
+export interface LeituraCorridaFoto {
+  ehResumoCorrida: boolean;
+  data: string;
+  distanciaKm: number;
+  duracaoMin: number;
+  ritmoMinKm: number;
+  velocidadeKmH: number;
+  calorias: number;
+  frequenciaCardiacaMedia: number;
+  comentario: string;
+}
+
+export function analisarCorridaFoto(perfil: Perfil, imagemBase64: string, mediaType: string) {
+  return post<LeituraCorridaFoto>('/api/ai/corrida-foto', { perfil, imagemBase64, mediaType });
+}
+
 export function gerarTreino(
   perfil: Perfil,
   local: string,
