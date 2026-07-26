@@ -74,6 +74,19 @@ export interface FormCorrida {
   observacoes: string;
 }
 
+export interface BlocoCorridaIA {
+  atividade: 'correr' | 'caminhar';
+  ritmo: 'leve' | 'moderado' | 'forte' | 'máximo';
+  duracaoSeg: number;
+  velocidadeAlvoKmH?: number;
+}
+
+export interface EtapaCorridaIA {
+  tipo: 'aquecimento' | 'intervalado' | 'continuo' | 'resfriamento';
+  repeticoes: number;
+  blocos: BlocoCorridaIA[];
+}
+
 export interface PlanoCorridaIA {
   nome: string;
   objetivo: string;
@@ -85,6 +98,7 @@ export interface PlanoCorridaIA {
     detalhes: string;
     distanciaKm?: number;
     duracaoMin?: number;
+    etapas?: EtapaCorridaIA[];
   }[];
   dicas: string;
 }

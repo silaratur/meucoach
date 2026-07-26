@@ -994,6 +994,19 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 /* ---------- Corrida ---------- */
 .modo-treino { margin-bottom: 12px; }
 .modo-treino .chip { font-size: 1rem; padding: 10px 18px; }
+.etapa-corrida-selo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--tom-sucesso-bg);
+  border: 1px solid var(--tom-sucesso-borda);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 8px;
+}
+.etapa-corrida-selo strong { color: var(--verde-escuro); font-size: 0.95rem; }
+.etapa-corrida-selo span { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--verde-escuro); }
 .corrida-metricas {
   display: flex;
   flex-wrap: wrap;

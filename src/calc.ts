@@ -8,6 +8,22 @@ export function diaSemanaHoje(): string {
   return DIAS_SEMANA[(idx + 6) % 7];
 }
 
+// Planos gerados por IA (corrida, musculação) não sabem qual é o dia de hoje, então a semana 1
+// às vezes vem fora de ordem (ex.: gerado num domingo com domingo escolhido, mas "Terça" aparece
+// primeiro). Reordena só a semana 1 pra começar no dia mais próximo de hoje (hoje mesmo, se for
+// um dos dias do plano) — da semana 2 em diante a ordem não importa mais.
+export function reordenarSemana1<T extends { semana: number; dia: string }>(dias: T[]): T[] {
+  const idxHoje = DIAS_SEMANA.indexOf(diaSemanaHoje());
+  const semana1 = dias.filter((d) => d.semana === 1);
+  const resto = dias.filter((d) => d.semana !== 1);
+  const comDistancia = semana1.map((d) => {
+    const idx = DIAS_SEMANA.indexOf(d.dia);
+    return { d, distancia: idx === -1 ? 999 : (idx - idxHoje + 7) % 7 };
+  });
+  comDistancia.sort((a, b) => a.distancia - b.distancia);
+  return [...comDistancia.map((x) => x.d), ...resto];
+}
+
 // Data LOCAL (yyyy-MM-dd) de um instante ISO — NUNCA use isoString.slice(0,10) para saber
 // "que dia local é esse instante": toISOString() é UTC, e no Brasil (UTC-3) qualquer horário
 // entre ~21h e 23h59 local já virou o dia seguinte em UTC, quebrando comparações de "mesmo dia".

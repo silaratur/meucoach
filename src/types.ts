@@ -187,6 +187,25 @@ export interface SessaoTreino {
 }
 
 // ---------- Plano de corrida ----------
+// Roteiro estrutural do treino, usado pelo RunPlayer pra guiar por voz (aquecimento, tiros,
+// caminhada de recuperação, resfriamento) — adicional ao texto livre em `detalhes`, que continua
+// existindo pra leitura humana. Opcional: planos antigos sem `etapas` seguem no modo "corrida
+// livre" (sem guiagem por etapas, só distância/ritmo por GPS).
+export interface BlocoCorrida {
+  id: string;
+  atividade: 'correr' | 'caminhar';
+  ritmo: 'leve' | 'moderado' | 'forte' | 'máximo'; // percepção de esforço
+  duracaoSeg: number;
+  velocidadeAlvoKmH?: number; // opcional, só quando o nível do aluno pede ritmo numérico
+}
+
+export interface EtapaCorrida {
+  id: string;
+  tipo: 'aquecimento' | 'intervalado' | 'continuo' | 'resfriamento';
+  repeticoes: number; // 1 para aquecimento/continuo/resfriamento; N para intervalado
+  blocos: BlocoCorrida[]; // sequência que se repete `repeticoes` vezes
+}
+
 export interface DiaCorrida {
   id: string;
   semana: number; // 1, 2, 3...
@@ -196,6 +215,7 @@ export interface DiaCorrida {
   detalhes: string;
   distanciaKm?: number;
   duracaoMin?: number;
+  etapas?: EtapaCorrida[];
 }
 
 export interface PlanoCorrida {

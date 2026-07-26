@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Perfil, SessaoTreino } from '../types';
+import type { BlocoCorrida, DiaCorrida, EtapaCorrida, Perfil, SessaoTreino } from '../types';
 import { uid } from '../storage';
 import { bip, falar, silenciar, vozDisponivel } from '../speech';
 import { IconeComecar, IconeParar, IconePausa, IconeSalvar, IconeCorrida } from './Icones';
-import { Satellite, Smartphone, Rocket, PartyPopper } from 'lucide-react';
+import { Satellite, Smartphone, Rocket, PartyPopper, SkipForward } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
   tituloTreino?: string; // dia do plano sendo executado, se houver
+  diaPlano?: DiaCorrida; // quando presente e com `etapas`, o coach guia o treino por voz
   aoTerminar: (s: SessaoTreino) => void;
   aoCancelar: () => void;
 }
@@ -20,6 +21,15 @@ const INCENTIVOS_CORRIDA = [
   'Olha você superando seus limites!',
   'Postura ereta, braços soltos. Perfeito!',
 ];
+
+// Faixa aproximada de km/h por percepção de esforço — usada só para dar feedback de ritmo
+// quando o bloco não tem `velocidadeAlvoKmH` numérico definido.
+const FAIXA_RITMO_KMH: Record<BlocoCorrida['ritmo'], [number, number]> = {
+  leve: [5, 8],
+  moderado: [7.5, 10.5],
+  forte: [10, 13],
+  máximo: [12, 20],
+};
 
 // Distância entre dois pontos GPS (fórmula de Haversine), em metros.
 function distanciaM(a: GeolocationCoordinates, b: GeolocationCoordinates): number {
@@ -65,11 +75,56 @@ function distanciaEmFala(km: number): string {
   return `${km.toFixed(1).replace('.', ' vírgula ')} quilômetros`;
 }
 
-export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar }: Props) {
+function formatarMMSS(seg: number): string {
+  const s = Math.max(0, seg);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function duracaoEmFala(seg: number): string {
+  if (seg < 60) return `${seg} segundos`;
+  const min = Math.round(seg / 60);
+  return `${min} minuto${min > 1 ? 's' : ''}`;
+}
+
+function fraseAtividade(bloco: BlocoCorrida): string {
+  if (bloco.atividade === 'caminhar') return bloco.ritmo === 'leve' ? 'caminhada leve' : 'caminhada';
+  const porRitmo: Record<BlocoCorrida['ritmo'], string> = {
+    leve: 'trote leve',
+    moderado: 'ritmo moderado',
+    forte: 'ritmo forte',
+    máximo: 'seu ritmo máximo',
+  };
+  return porRitmo[bloco.ritmo];
+}
+
+function fraseInicioBloco(etapa: EtapaCorrida, bloco: BlocoCorrida, repeticao: number): string {
+  const duracao = duracaoEmFala(bloco.duracaoSeg);
+  if (etapa.tipo === 'aquecimento') return `${duracao} de aquecimento, ${fraseAtividade(bloco)} pra soltar o corpo.`;
+  if (etapa.tipo === 'resfriamento') return `Última etapa: volta à calma, ${duracao} de ${fraseAtividade(bloco)}. Você mandou muito bem hoje!`;
+  if (etapa.tipo === 'intervalado') {
+    if (bloco.atividade === 'caminhar') return `Recuperação: ${duracao} de ${fraseAtividade(bloco)}.`;
+    return `Tiro ${repeticao} de ${etapa.repeticoes}! ${duracao} em ${fraseAtividade(bloco)}.`;
+  }
+  return `Agora ${duracao} em ${fraseAtividade(bloco)}.`;
+}
+
+function rotuloEtapa(etapa: EtapaCorrida, bloco: BlocoCorrida, repeticao: number): string {
+  if (etapa.tipo === 'aquecimento') return 'Aquecimento';
+  if (etapa.tipo === 'resfriamento') return 'Volta à calma';
+  if (etapa.tipo === 'intervalado') return `Intervalado — ${bloco.atividade === 'correr' ? 'Tiro' : 'Recuperação'} ${repeticao}/${etapa.repeticoes}`;
+  return 'Corrida contínua';
+}
+
+export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, aoCancelar }: Props) {
+  const guiado = !!diaPlano?.etapas?.length;
   const [estado, setEstado] = useState<'pronto' | 'correndo' | 'pausado' | 'fim'>('pronto');
   const [distM, setDistM] = useState(0);
   const [segundos, setSegundos] = useState(0);
   const [gpsOk, setGpsOk] = useState<'aguardando' | 'ok' | 'erro'>('aguardando');
+  const [etapaIdx, setEtapaIdx] = useState(0);
+  const [repeticao, setRepeticao] = useState(1);
+  const [blocoIdx, setBlocoIdx] = useState(0);
+  const [restanteBloco, setRestanteBloco] = useState(0);
 
   const ultimaPosRef = useRef<GeolocationPosition | null>(null);
   const watchRef = useRef<number | null>(null);
@@ -80,6 +135,17 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
   const estadoRef = useRef(estado);
   estadoRef.current = estado;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+
+  // Navegação do roteiro guiado (etapas/repetições/blocos) — refs pra ler dentro do tick do
+  // setInterval sem depender de closures desatualizadas, espelhando o padrão já usado pra
+  // distância/tempo total (distRef/segRef).
+  const etapaIdxRef = useRef(0);
+  const repeticaoRef = useRef(1);
+  const blocoIdxRef = useRef(0);
+  const restanteBlocoRef = useRef(0);
+  const avisadoQuaseFimRef = useRef(false);
+  const distBlocoInicioRef = useRef(0);
+  const segBlocoInicioRef = useRef(0);
 
   async function manterTelaAcesa() {
     try {
@@ -126,7 +192,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     if (velocidadeImplicitaMs > 10) return;
     distRef.current += passo;
     setDistM(distRef.current);
-    if (distRef.current >= proximoAnuncioRef.current) {
+    if (!guiado && distRef.current >= proximoAnuncioRef.current) {
       proximoAnuncioRef.current += 500;
       anunciarProgresso();
     }
@@ -140,6 +206,86 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     bip(1);
   }
 
+  // Compara a velocidade real do bloco (desde que começou) com a faixa esperada pro ritmo
+  // pedido — sempre em tom de apoio, nunca de crítica. null quando a amostra é pequena demais
+  // pra significar algo (bloco muito curto ou deslocamento por GPS insuficiente).
+  function avaliarRitmoBloco(bloco: BlocoCorrida): string | null {
+    if (bloco.atividade !== 'correr') return null;
+    const distBlocoM = distRef.current - distBlocoInicioRef.current;
+    const segBloco = segRef.current - segBlocoInicioRef.current;
+    if (segBloco < 30 || distBlocoM < 30) return null;
+    const kmh = (distBlocoM / 1000) / (segBloco / 3600);
+    const [min, max] = bloco.velocidadeAlvoKmH
+      ? [bloco.velocidadeAlvoKmH * 0.85, bloco.velocidadeAlvoKmH * 1.15]
+      : FAIXA_RITMO_KMH[bloco.ritmo];
+    if (kmh < min) return 'ritmo um pouco mais lento que o pedido, sem problema — o importante é manter a consistência.';
+    if (kmh > max) return bloco.ritmo === 'máximo' ? null : 'você foi mais rápido que o pedido — bom sinal, mas sem queimar o gás todo agora.';
+    return 'ritmo bom, dentro do esperado.';
+  }
+
+  function iniciarBlocoAtual(primeira: boolean) {
+    const etapa = diaPlano!.etapas![etapaIdxRef.current];
+    const bloco = etapa.blocos[blocoIdxRef.current];
+    setEtapaIdx(etapaIdxRef.current);
+    setRepeticao(repeticaoRef.current);
+    setBlocoIdx(blocoIdxRef.current);
+    restanteBlocoRef.current = bloco.duracaoSeg;
+    setRestanteBloco(bloco.duracaoSeg);
+    distBlocoInicioRef.current = distRef.current;
+    segBlocoInicioRef.current = segRef.current;
+    avisadoQuaseFimRef.current = false;
+    const frase = fraseInicioBloco(etapa, bloco, repeticaoRef.current);
+    falar(primeira ? `Bora, ${perfil.nome}! Vamos começar! ${frase}` : frase);
+    if (!primeira) bip(2);
+  }
+
+  function avancarBloco() {
+    const etapas = diaPlano!.etapas!;
+    const etapa = etapas[etapaIdxRef.current];
+    if (blocoIdxRef.current < etapa.blocos.length - 1) {
+      blocoIdxRef.current += 1;
+    } else if (repeticaoRef.current < etapa.repeticoes) {
+      repeticaoRef.current += 1;
+      blocoIdxRef.current = 0;
+    } else if (etapaIdxRef.current < etapas.length - 1) {
+      etapaIdxRef.current += 1;
+      blocoIdxRef.current = 0;
+      repeticaoRef.current = 1;
+    } else {
+      terminar();
+      return;
+    }
+    iniciarBlocoAtual(false);
+  }
+
+  function tickBloco() {
+    restanteBlocoRef.current -= 1;
+    const r = restanteBlocoRef.current;
+    setRestanteBloco(Math.max(0, r));
+    if (r <= 0) {
+      avancarBloco();
+      return;
+    }
+    const etapa = diaPlano!.etapas![etapaIdxRef.current];
+    const bloco = etapa.blocos[blocoIdxRef.current];
+    const marco = bloco.duracaoSeg >= 15 ? Math.max(5, Math.round(bloco.duracaoSeg * 0.25)) : -1;
+    if (r === marco && !avisadoQuaseFimRef.current) {
+      avisadoQuaseFimRef.current = true;
+      const feedback = bloco.atividade === 'correr' ? avaliarRitmoBloco(bloco) : null;
+      const frase = feedback
+        ? `Falta pouco! ${feedback}`
+        : bloco.atividade === 'correr'
+          ? 'Falta pouco, sustenta o ritmo!'
+          : 'Recuperação quase acabando, já pode ir se preparando.';
+      falar(frase, { fila: true });
+    }
+  }
+
+  function pularEtapa() {
+    bip(1);
+    avancarBloco();
+  }
+
   function iniciar() {
     if (!navigator.geolocation) {
       setGpsOk('erro');
@@ -148,7 +294,14 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
     }
     setEstado('correndo');
     manterTelaAcesa();
-    falar(`Bora, ${perfil.nome}! ${tituloTreino ? tituloTreino + '. ' : ''}Vou te acompanhar a cada 500 metros. Boa corrida!`);
+    if (guiado) {
+      etapaIdxRef.current = 0;
+      repeticaoRef.current = 1;
+      blocoIdxRef.current = 0;
+      iniciarBlocoAtual(true);
+    } else {
+      falar(`Bora, ${perfil.nome}! ${tituloTreino ? tituloTreino + '. ' : ''}Vou te acompanhar a cada 500 metros. Boa corrida!`);
+    }
     watchRef.current = navigator.geolocation.watchPosition(aoNovaPosicao, () => setGpsOk('erro'), {
       enableHighAccuracy: true,
       maximumAge: 1000,
@@ -158,6 +311,7 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
       if (estadoRef.current === 'correndo') {
         segRef.current += 1;
         setSegundos(segRef.current);
+        if (guiado) tickBloco();
       }
     }, 1000);
   }
@@ -209,6 +363,8 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
   const hh = Math.floor(segundos / 3600);
   const mm = String(Math.floor((segundos % 3600) / 60)).padStart(2, '0');
   const ss = String(segundos % 60).padStart(2, '0');
+  const etapaAtual = guiado ? diaPlano!.etapas![etapaIdx] : undefined;
+  const blocoAtual = etapaAtual?.blocos[blocoIdx];
 
   return (
     <div className="cartao">
@@ -224,7 +380,9 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
       {estado === 'pronto' && (
         <div className="centro">
           <p>
-            Vou medir sua distância e ritmo pelo GPS e te acompanhar por voz a cada 500 metros.
+            {guiado
+              ? 'Vou te guiar por voz em cada etapa deste treino — aquecimento, tiros, recuperação e volta à calma — avaliando seu ritmo no caminho.'
+              : 'Vou medir sua distância e ritmo pelo GPS e te acompanhar por voz a cada 500 metros.'}
             {!vozDisponivel() && ' (voz indisponível neste navegador)'}
           </p>
           <p className="meta-texto"><Smartphone size={14} /> Mantenha o app aberto durante a corrida — a tela ficará sempre acesa.</p>
@@ -235,6 +393,12 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
 
       {(estado === 'correndo' || estado === 'pausado') && (
         <div className="centro">
+          {guiado && etapaAtual && blocoAtual && (
+            <div className="etapa-corrida-selo">
+              <strong>{rotuloEtapa(etapaAtual, blocoAtual, repeticao)}</strong>
+              <span>{formatarMMSS(restanteBloco)}</span>
+            </div>
+          )}
           <div className="corrida-metricas">
             <div>
               <small>Distância</small>
@@ -259,6 +423,9 @@ export default function RunPlayer({ perfil, tituloTreino, aoTerminar, aoCancelar
               <button onClick={pausar}><IconePausa size={16} /> Pausar</button>
             ) : (
               <button className="primario" onClick={retomar}><IconeComecar size={16} /> Retomar</button>
+            )}
+            {guiado && estado === 'correndo' && (
+              <button className="mini" onClick={pularEtapa}><SkipForward size={14} /> Pular</button>
             )}
             <button className="perigo" onClick={() => { if (confirm('Encerrar a corrida?')) terminar(); }}>
               <IconeParar size={16} /> Encerrar

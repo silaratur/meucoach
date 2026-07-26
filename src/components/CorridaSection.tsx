@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import type { DadosPerfil, Perfil, PlanoCorrida, SessaoTreino } from '../types';
+import type { DadosPerfil, DiaCorrida, Perfil, PlanoCorrida, SessaoTreino } from '../types';
 import { DIAS_SEMANA } from '../types';
 import { uid } from '../storage';
+import { reordenarSemana1 } from '../calc';
 import { gerarPlanoCorrida, analisarCorridaFoto } from '../api';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
@@ -19,7 +20,7 @@ interface Props {
 }
 
 export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPerfil }: Props) {
-  const [correndo, setCorrendo] = useState<string | null>(null); // título do treino em execução
+  const [correndo, setCorrendo] = useState<{ titulo: string; dia?: DiaCorrida } | null>(null);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
   // avaliação do corredor
@@ -75,7 +76,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
         nome: p.nome,
         objetivo: p.objetivo,
         dicas: p.dicas,
-        dias: p.dias.map((d) => ({ ...d, id: uid() })),
+        dias: reordenarSemana1(p.dias.map((d) => ({ ...d, id: uid(), etapas: d.etapas?.map((e) => ({ ...e, id: uid(), blocos: e.blocos.map((b) => ({ ...b, id: uid() })) })) }))),
         concluidos: [],
       };
       atualizar((d) => ({ ...d, planosCorrida: [novo] })); // um plano ativo por vez
@@ -159,7 +160,8 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
     return (
       <RunPlayer
         perfil={perfil}
-        tituloTreino={correndo || undefined}
+        tituloTreino={correndo.titulo || undefined}
+        diaPlano={correndo.dia}
         aoTerminar={salvarCorrida}
         aoCancelar={() => setCorrendo(null)}
       />
@@ -174,7 +176,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
       <div className="cartao">
         <h2><IconeCorrida size={19} /> Correr agora</h2>
         <p className="meta-texto">GPS + coach por voz: distância, ritmo e incentivo a cada 500 metros.</p>
-        <button className="primario grande" onClick={() => setCorrendo('')}><IconeComecar size={17} /> Iniciar corrida livre</button>
+        <button className="primario grande" onClick={() => setCorrendo({ titulo: '' })}><IconeComecar size={17} /> Iniciar corrida livre</button>
       </div>
 
       <div className="cartao">
@@ -282,7 +284,7 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
                     </label>
                     <p className="detalhes-dia">{d.detalhes}</p>
                     {!/descanso/i.test(d.tipo) && (
-                      <button className="mini" onClick={() => setCorrendo(`${d.titulo} (semana ${sem})`)}>
+                      <button className="mini" onClick={() => setCorrendo({ titulo: `${d.titulo} (semana ${sem})`, dia: d })}>
                         <IconeComecar size={14} /> Correr este treino
                       </button>
                     )}

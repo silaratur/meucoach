@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { DadosPerfil, LocalTreino, Perfil, PlanoMusculacao, Treino } from '../types';
 import { LOCAIS } from '../types';
 import { uid, hojeISO } from '../storage';
-import { dataLocalDe } from '../calc';
+import { dataLocalDe, reordenarSemana1 } from '../calc';
 import { gerarPlano, gerarTreino } from '../api';
 import { IconeComecar, IconeEditar, IconeExcluir, IconeCoach, IconeAquecimento, IconeCorrida, IconeAlongamento, IconeDica, ICONE_LOCAL } from './Icones';
 import { Zap, CalendarDays, TrendingUp, PartyPopper } from 'lucide-react';
@@ -157,11 +157,11 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
           local,
           criadoEm: new Date().toISOString(),
           concluidos: [],
-          dias: p.dias.map((d) => ({
+          dias: reordenarSemana1(p.dias.map((d) => ({
             ...d,
             id: uid(),
             exercicios: d.exercicios.map((e) => ({ ...e, id: uid() })),
-          })),
+          }))),
         };
         atualizar((d) => ({ ...d, planosMusculacao: [novo] }));
       }

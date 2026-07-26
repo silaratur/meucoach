@@ -822,6 +822,29 @@ Gere os dias de treino para ${periodo} completa(s), APENAS nos dias da semana qu
 });
 
 // ---------- Plano de corrida (dia a dia) ----------
+const SCHEMA_BLOCO_CORRIDA = {
+  type: 'object',
+  properties: {
+    atividade: { type: 'string', enum: ['correr', 'caminhar'] },
+    ritmo: { type: 'string', enum: ['leve', 'moderado', 'forte', 'máximo'], description: 'Percepção de esforço' },
+    duracaoSeg: { type: 'integer' },
+    velocidadeAlvoKmH: { type: 'number', description: '0 se não fizer sentido dar um alvo numérico pro nível do aluno' },
+  },
+  required: ['atividade', 'ritmo', 'duracaoSeg', 'velocidadeAlvoKmH'],
+  additionalProperties: false,
+};
+
+const SCHEMA_ETAPA_CORRIDA = {
+  type: 'object',
+  properties: {
+    tipo: { type: 'string', enum: ['aquecimento', 'intervalado', 'continuo', 'resfriamento'] },
+    repeticoes: { type: 'integer', description: '1 para aquecimento/continuo/resfriamento; nº de tiros para intervalado' },
+    blocos: { type: 'array', items: SCHEMA_BLOCO_CORRIDA, description: 'Sequência que se repete `repeticoes` vezes' },
+  },
+  required: ['tipo', 'repeticoes', 'blocos'],
+  additionalProperties: false,
+};
+
 const SCHEMA_CORRIDA = {
   type: 'object',
   properties: {
@@ -842,8 +865,14 @@ const SCHEMA_CORRIDA = {
           detalhes: { type: 'string', description: 'Instruções completas: aquecimento, ritmo/percepção de esforço, séries, volta à calma' },
           distanciaKm: { type: 'number' },
           duracaoMin: { type: 'integer' },
+          etapas: {
+            type: 'array',
+            items: SCHEMA_ETAPA_CORRIDA,
+            description:
+              'Roteiro estruturado do MESMO treino descrito em "detalhes", pro coach guiar por voz durante a corrida. [] para dias de descanso.',
+          },
         },
-        required: ['semana', 'dia', 'tipo', 'titulo', 'detalhes'],
+        required: ['semana', 'dia', 'tipo', 'titulo', 'detalhes', 'etapas'],
         additionalProperties: false,
       },
     },
@@ -886,8 +915,30 @@ Demais diretrizes:
 - Crie entradas apenas para os dias de corrida (mais orientações de descanso estratégico quando merecerem).
 - Cada treino: aquecimento, trabalho principal com ritmos por percepção de esforço (leve/moderado/forte) ou ritmo-alvo, e volta à calma.
 - Respeite as restrições de saúde do perfil.
-- Em "dicas": como conciliar a semana corrida+musculação, hidratação, tênis, alimentação pré/pós considerando o horário de treino, e sinais de alerta para parar.`;
-    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 16000 });
+- Em "dicas": como conciliar a semana corrida+musculação, hidratação, tênis, alimentação pré/pós considerando o horário de treino, e sinais de alerta para parar.
+
+## Roteiro estruturado ("etapas") — pro coach guiar por voz DURANTE a corrida
+Além de "detalhes" (texto corrido), cada dia de treino real (tipo != descanso) precisa de "etapas":
+o MESMO treino, decomposto em passos que um app vai anunciar por voz em tempo real. Um app de
+corrida vai tocar "1 etapa por vez"; a pessoa não lê nada, só ouve.
+- Praticamente todo treino real leva 3 etapas na ordem: aquecimento (trote leve, tipicamente
+  5-10 min) → etapa principal → resfriamento (caminhada leve, tipicamente 3-5 min). Cada uma é um
+  item de "etapas" com repeticoes:1 e um único bloco.
+- Treinos "intervalado": a etapa principal tem tipo:"intervalado", repeticoes = número de tiros,
+  e blocos = [tiro (atividade:"correr", ritmo do tiro), recuperação (atividade:"caminhar" ou
+  "correr" leve)] — essa sequência de 2 blocos se repete "repeticoes" vezes. Ex.: "6x correr 1 min
+  leve + caminhar 2 min" = { tipo:"intervalado", repeticoes:6, blocos:[{atividade:"correr",
+  ritmo:"leve", duracaoSeg:60}, {atividade:"caminhar", ritmo:"leve", duracaoSeg:120}] }.
+- Treinos "corrida leve"/"longão"/"regenerativo": a etapa principal tem tipo:"continuo",
+  repeticoes:1, um único bloco cobrindo o tempo restante do treino (duracaoMin menos aquecimento
+  e resfriamento) no ritmo pedido.
+- "ritmo" é SEMPRE um dos 4 valores fixos (percepção de esforço). "velocidadeAlvoKmH": só
+  preencha um valor >0 se o aluno for nível regular/experiente e o treino pedir um ritmo numérico
+  específico; senão deixe 0.
+- "etapas" deve ser fiel ao que está descrito em "detalhes" — são duas representações do mesmo
+  treino, não podem se contradizer.
+- Dias de descanso: "etapas": [].`;
+    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 24000 });
     res.json(JSON.parse(textoDaResposta(response)));
   } catch (err) {
     console.error(err);
