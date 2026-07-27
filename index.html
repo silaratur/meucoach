@@ -25,7 +25,23 @@
       // estático), mas em dev (Vite) intercepta e cacheia os próprios módulos do dev server,
       // causando telas em branco intermitentes. Só registra fora do servidor de dev do Vite.
       if ('serviceWorker' in navigator && !location.port) {
-        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+        window.addEventListener('load', () => {
+          // sw.js já usa skipWaiting()+clients.claim() (ativa a versão nova imediatamente),
+          // mas isso só troca QUEM controla a aba — o JS que já está rodando na memória do
+          // navegador continua sendo o antigo até a página recarregar. Sem isso, quem já
+          // tinha o app aberto num deploy anterior só vê a versão nova ao fechar e abrir de
+          // novo (ou fazer hard refresh) — some sozinho na próxima visita normal, com isso aqui.
+          const jaTinhaController = !!navigator.serviceWorker.controller;
+          navigator.serviceWorker.register('/sw.js');
+          if (jaTinhaController) {
+            let recarregando = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+              if (recarregando) return;
+              recarregando = true;
+              location.reload();
+            });
+          }
+        });
       }
     </script>
   </body>
