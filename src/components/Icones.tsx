@@ -27,7 +27,6 @@ export {
   Mic as IconeMicrofone,
   AudioLines as IconeNotaAudio,
   KeyRound as IconeChave,
-  ImageOff as IconeImagemIndisponivel,
   Save as IconeSalvar,
 } from 'lucide-react';
 

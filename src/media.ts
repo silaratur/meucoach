@@ -43,44 +43,6 @@ export async function urlMidia(id: string): Promise<string | null> {
   return url;
 }
 
-// Imagem ilustrativa do exercício, gerada por IA e cacheada no SERVIDOR por nome (todas as
-// pessoas reaproveitam a mesma imagem pro mesmo exercício — evita gerar/pagar de novo).
-// O cache aqui no cliente é só a URL de objeto local, pra não refazer a requisição a cada
-// re-render do mesmo exercício durante a sessão.
-const urlImagemExercicioCache = new Map<string, string>();
-
-export async function urlImagemExercicio(nomeExercicio: string): Promise<string | null> {
-  if (urlImagemExercicioCache.has(nomeExercicio)) return urlImagemExercicioCache.get(nomeExercicio)!;
-  const resp = await fetch(`/api/exercicio-imagem?nome=${encodeURIComponent(nomeExercicio)}`, { headers: cabecalhos() });
-  if (resp.status === 401) notificarNaoAutorizado();
-  if (!resp.ok) return null;
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  urlImagemExercicioCache.set(nomeExercicio, url);
-  return url;
-}
-
-// Grupo muscular do exercício via wger.de (base aberta, cache no SERVIDOR por nome). Retorna
-// null quando não há correspondência confiável — quem chama deve cair de volta para
-// urlImagemExercicio (ilustração por IA) nesse caso.
-export interface MusculoExercicio {
-  svgUrl: string | null;
-  musculoNome: string | null;
-}
-
-const musculoExercicioCache = new Map<string, MusculoExercicio | null>();
-
-export async function musculoExercicio(nomeExercicio: string): Promise<MusculoExercicio | null> {
-  if (musculoExercicioCache.has(nomeExercicio)) return musculoExercicioCache.get(nomeExercicio)!;
-  const resp = await fetch(`/api/exercicio-musculo?nome=${encodeURIComponent(nomeExercicio)}`, { headers: cabecalhos() });
-  if (resp.status === 401) notificarNaoAutorizado();
-  if (!resp.ok) return null;
-  const data = (await resp.json()) as MusculoExercicio;
-  const resultado = data.svgUrl ? data : null;
-  musculoExercicioCache.set(nomeExercicio, resultado);
-  return resultado;
-}
-
 export async function excluirMidia(id: string): Promise<void> {
   const url = urlCache.get(id);
   if (url) {

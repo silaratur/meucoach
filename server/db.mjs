@@ -35,25 +35,6 @@ CREATE TABLE IF NOT EXISTS midias (
 );
 CREATE INDEX IF NOT EXISTS idx_midias_perfil ON midias(perfil_id);
 
--- Imagens ilustrativas de exercício geradas por IA — cache GLOBAL por nome normalizado
--- (não por perfil): o mesmo exercício não precisa ser gerado de novo para outra pessoa.
-CREATE TABLE IF NOT EXISTS imagens_exercicio (
-  nome TEXT PRIMARY KEY,
-  mime TEXT NOT NULL,
-  dados BLOB NOT NULL,
-  criado_em TEXT NOT NULL
-);
-
--- Correspondência exercício → músculo (wger.de, base aberta CC-BY-SA), cache GLOBAL por nome
--- normalizado. svg_url NULL significa "já buscou e não achou correspondência confiável"
--- (evita repetir a busca fuzzy a cada chamada).
-CREATE TABLE IF NOT EXISTS musculo_exercicio (
-  nome TEXT PRIMARY KEY,
-  svg_url TEXT,
-  musculo_nome TEXT,
-  encontrado_em TEXT NOT NULL
-);
-
 -- Inscrições de notificação push (lembrete diário) — uma linha por navegador/aparelho inscrito,
 -- não por perfil (a mesma pessoa pode ter mais de um aparelho). endpoint é único por natureza
 -- (identifica o navegador/aparelho junto ao serviço de push), então serve de chave de upsert.

@@ -9,7 +9,6 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
 import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, diasDesde, horaMinutoSaoPaulo, metaDiaria, reordenarSemana1, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
-import { buscarMusculoExercicio } from './wger.mjs';
 import { VAPID, enviarPush } from './push.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -382,80 +381,7 @@ app.delete('/api/midia/:id', autenticar, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Imagem ilustrativa de exercício (gerada por IA, cacheada por nome) ----------
-function normalizarNomeExercicio(nome) {
-  return nome
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
-    .replace(/\s+/g, ' ');
-}
-
-async function gerarImagemExercicio(nomeExercicio) {
-  const prompt = `Ilustração simples em estilo flat/vetor mostrando a execução correta do exercício de musculação "${nomeExercicio}": uma pessoa em vista lateral, postura anatomicamente correta, fundo neutro liso, sem texto, sem logotipos, foco didático na técnica.`;
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        instances: [{ prompt }],
-        parameters: { sampleCount: 1, aspectRatio: '4:3' },
-      }),
-    },
-  );
-  if (!resp.ok) throw new Error(`Gemini respondeu ${resp.status}: ${(await resp.text()).slice(0, 300)}`);
-  const data = await resp.json();
-  const previsao = data.predictions?.[0];
-  if (!previsao?.bytesBase64Encoded) throw new Error('Gemini não retornou imagem.');
-  return { mime: previsao.mimeType || 'image/png', dados: Buffer.from(previsao.bytesBase64Encoded, 'base64') };
-}
-
-app.get('/api/exercicio-imagem', autenticar, async (req, res) => {
-  const nomeOriginal = String(req.query.nome || '').trim();
-  if (!nomeOriginal) return res.status(400).json({ error: 'Nome do exercício obrigatório.' });
-  const chave = normalizarNomeExercicio(nomeOriginal);
-
-  const cache = db.prepare('SELECT mime, dados FROM imagens_exercicio WHERE nome = ?').get(chave);
-  if (cache) {
-    res.set('Content-Type', cache.mime);
-    res.set('Cache-Control', 'private, max-age=31536000, immutable');
-    return res.send(cache.dados);
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: 'Geração de imagem de exercício não configurada (falta GEMINI_API_KEY).' });
-  }
-  try {
-    const { mime, dados } = await gerarImagemExercicio(nomeOriginal);
-    db.prepare('INSERT OR REPLACE INTO imagens_exercicio (nome, mime, dados, criado_em) VALUES (?, ?, ?, ?)').run(
-      chave,
-      mime,
-      dados,
-      new Date().toISOString(),
-    );
-    res.set('Content-Type', mime);
-    res.set('Cache-Control', 'private, max-age=31536000, immutable');
-    res.send(dados);
-  } catch (e) {
-    res.status(502).json({ error: 'Falha ao gerar imagem do exercício: ' + e.message });
-  }
-});
-
-// ---------- Grupo muscular do exercício (wger.de, base aberta — fallback gratuito ao banco 3D) ----------
-app.get('/api/exercicio-musculo', autenticar, async (req, res) => {
-  const nomeExercicio = String(req.query.nome || '').trim();
-  if (!nomeExercicio) return res.status(400).json({ error: 'Nome do exercício obrigatório.' });
-  try {
-    const resultado = await buscarMusculoExercicio(nomeExercicio);
-    res.json(resultado ?? { svgUrl: null, musculoNome: null });
-  } catch (e) {
-    res.status(502).json({ error: 'Falha ao buscar músculo do exercício: ' + e.message });
-  }
-});
-
-const SYSTEM = `Você é o "Meu Coach", um personal trainer especialista em musculação e atividade física, e também nutricionista esportivo. Você atende famílias brasileiras pelo aplicativo.
+const SYSTEM =`Você é o "Meu Coach", um personal trainer especialista em musculação e atividade física, e também nutricionista esportivo. Você atende famílias brasileiras pelo aplicativo.
 
 Princípios:
 - Fale sempre em português do Brasil, com tom encorajador, direto e prático — como um bom personal que conhece o aluno há anos.
