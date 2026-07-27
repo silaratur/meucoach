@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { db, JWT_SECRET, uid } from './db.mjs';
-import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, diasDesde, horaMinutoSaoPaulo, metaDiaria, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
+import { dataSaoPauloDe, dataSaoPauloISO, diaSemanaSaoPaulo, diasDesde, horaMinutoSaoPaulo, metaDiaria, reordenarSemana1, resumoAtividade, streakDias, totaisDoDia } from './calc.mjs';
 import { buscarMusculoExercicio } from './wger.mjs';
 import { VAPID, enviarPush } from './push.mjs';
 
@@ -208,6 +208,37 @@ async function enviarPushParaPerfil(perfilId, payload) {
   }
   return enviados;
 }
+
+// ---------- Jobs de IA em background (fire-and-forget) ----------
+// Geração de plano (musculação/corrida/dieta) roda no processo já em pé, sem fila externa — o
+// cliente recebe um jobId na hora e acompanha por polling/push, em vez de segurar a conexão HTTP
+// esperando a IA terminar (o que quebra se a tela bloquear ou o app for pra segundo plano).
+function criarJobIA(perfilId, tipo) {
+  const id = uid();
+  db.prepare('INSERT INTO jobs_ia (id, perfil_id, tipo, status, criado_em) VALUES (?, ?, ?, ?, ?)').run(
+    id,
+    perfilId,
+    tipo,
+    'processando',
+    new Date().toISOString(),
+  );
+  return id;
+}
+
+function concluirJobIA(id, erro) {
+  db.prepare('UPDATE jobs_ia SET status = ?, erro = ?, concluido_em = ? WHERE id = ?').run(
+    erro ? 'falhou' : 'concluido',
+    erro ?? null,
+    new Date().toISOString(),
+    id,
+  );
+}
+
+app.get('/api/jobs-ia/:id', autenticar, (req, res) => {
+  const job = db.prepare('SELECT status, erro, perfil_id FROM jobs_ia WHERE id = ?').get(req.params.id);
+  if (!job || job.perfil_id !== req.perfilId) return res.status(404).json({ error: 'Job não encontrado.' });
+  res.json({ status: job.status, erro: job.erro ?? undefined });
+});
 
 // Envia um push imediato pro próprio aparelho — só pra a pessoa confirmar que a permissão e a
 // inscrição estão funcionando de verdade, sem precisar esperar o horário do lembrete automático.
@@ -825,9 +856,23 @@ const SCHEMA_PLANO_MENSAL = {
 
 app.post('/api/ai/plano', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
-  try {
-    const { perfil, local, duracaoMin, historico, sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, foco, avaliacaoRecente, atividadeRecente } = req.body;
-    const semanas = [1, 2, 4].includes(+req.body.semanas) ? +req.body.semanas : 4;
+  const jobId = criarJobIA(req.perfilId, 'plano_mensal');
+  res.status(202).json({ jobId });
+  processarPlanoMensal(jobId, req.perfilId, req.body).catch((err) => {
+    console.error(err);
+    concluirJobIA(jobId, mensagemErro(err));
+    enviarPushParaPerfil(req.perfilId, {
+      title: 'Meu Coach',
+      body: 'Não consegui gerar seu treino agora. Toque para tentar de novo.',
+      url: '/',
+    }).catch(() => {});
+  });
+});
+
+async function processarPlanoMensal(jobId, perfilId, body) {
+  const { perfil, local, duracaoMin, historico, sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, foco, avaliacaoRecente, atividadeRecente } = body;
+  {
+    const semanas = [1, 2, 4].includes(+body.semanas) ? +body.semanas : 4;
     const periodo = semanas === 1 ? '1 semana' : `${semanas} semanas`;
     const focoTexto =
       !foco || foco === 'coach'
@@ -905,14 +950,42 @@ ${JSON.stringify(planoCorridaResumo ?? { info: 'não tem plano de corrida' }, nu
 
 Gere os dias de treino para ${periodo} completa(s), APENAS nos dias da semana que o aluno marcou para musculação (ver "Dias preferidos para musculação" no perfil). Se ele não marcou dias, use uma frequência de 3x/semana em dias alternados (Segunda/Quarta/Sexta). Cada exercício deve ter "instrucoes" ensinando a execução correta (postura, amplitude completa, respiração, velocidade) e "dicaRapida" para reforço durante a série.`;
     const maxTokens = semanas <= 1 ? 16000 : semanas === 2 ? 28000 : 48000;
-    const response = await chamarIA(user, { schema: SCHEMA_PLANO_MENSAL, maxTokens, res });
-    res.end(JSON.stringify({ ...JSON.parse(textoDaResposta(response)), semanas }));
-  } catch (err) {
-    console.error(err);
-    if (res.headersSent) res.end();
-    else res.status(500).json({ error: mensagemErro(err) });
+    const response = await chamarIA(user, { schema: SCHEMA_PLANO_MENSAL, maxTokens });
+    const p = JSON.parse(textoDaResposta(response));
+    const novo = {
+      id: uid(),
+      nome: p.nome,
+      semanas: p.semanas ?? semanas,
+      avaliacaoInicial: p.avaliacaoInicial,
+      estrategiaMes: p.estrategiaMes,
+      recomendacoesGerais: p.recomendacoesGerais,
+      local,
+      criadoEm: new Date().toISOString(),
+      concluidos: [],
+      dias: reordenarSemana1(p.dias.map((d) => ({
+        ...d,
+        id: uid(),
+        exercicios: d.exercicios.map((e) => ({ ...e, id: uid() })),
+      }))),
+    };
+    // Relê dados_json fresco (em vez de confiar num snapshot antigo) e faz merge só do campo
+    // relevante — evita apagar mudanças que o cliente tenha salvo enquanto o job rodava.
+    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+    const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
+    const dadosNovo = { ...dadosAtual, planosMusculacao: [novo] };
+    db.prepare('UPDATE perfis SET dados_json = ?, atualizado_em = ? WHERE id = ?').run(
+      JSON.stringify(dadosNovo),
+      new Date().toISOString(),
+      perfilId,
+    );
+    concluirJobIA(jobId);
+    await enviarPushParaPerfil(perfilId, {
+      title: 'Meu Coach',
+      body: 'Seu treino novo está pronto! Toque para ver.',
+      url: '/',
+    });
   }
-});
+}
 
 // ---------- Plano de corrida (dia a dia) ----------
 const SCHEMA_BLOCO_CORRIDA = {
@@ -977,8 +1050,22 @@ const SCHEMA_CORRIDA = {
 
 app.post('/api/ai/corrida', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
-  try {
-    const { perfil, nivelCorrida, objetivoCorrida, diasCorrida, capacidadeAtual, observacoes, corridasRecentes, musculacao } = req.body;
+  const jobId = criarJobIA(req.perfilId, 'plano_corrida');
+  res.status(202).json({ jobId });
+  processarPlanoCorrida(jobId, req.perfilId, req.body).catch((err) => {
+    console.error(err);
+    concluirJobIA(jobId, mensagemErro(err));
+    enviarPushParaPerfil(req.perfilId, {
+      title: 'Meu Coach',
+      body: 'Não consegui gerar seu plano de corrida agora. Toque para tentar de novo.',
+      url: '/',
+    }).catch(() => {});
+  });
+});
+
+async function processarPlanoCorrida(jobId, perfilId, body) {
+  {
+    const { perfil, nivelCorrida, objetivoCorrida, diasCorrida, capacidadeAtual, observacoes, corridasRecentes, musculacao } = body;
     const user = `Você é um treinador de corrida de elite (preparador de provas de rua) trabalhando dentro de um PLANO INTEGRADO DE SAÚDE: este aluno também faz musculação e acompanha a alimentação no mesmo app. O plano de corrida deve se ENCAIXAR na rotina dele, nunca competir com ela.
 
 ## Avaliação do corredor
@@ -1031,14 +1118,37 @@ corrida vai tocar "1 etapa por vez"; a pessoa não lê nada, só ouve.
 - "etapas" deve ser fiel ao que está descrito em "detalhes" — são duas representações do mesmo
   treino, não podem se contradizer.
 - Dias de descanso: "etapas": [].`;
-    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 24000, res });
-    res.end(textoDaResposta(response));
-  } catch (err) {
-    console.error(err);
-    if (res.headersSent) return res.end();
-    res.status(500).json({ error: mensagemErro(err) });
+    const response = await chamarIA(user, { schema: SCHEMA_CORRIDA, maxTokens: 24000 });
+    const p = JSON.parse(textoDaResposta(response));
+    const novo = {
+      id: uid(),
+      criadoEm: new Date().toISOString(),
+      nome: p.nome,
+      objetivo: p.objetivo,
+      dicas: p.dicas,
+      dias: reordenarSemana1(p.dias.map((d) => ({
+        ...d,
+        id: uid(),
+        etapas: d.etapas?.map((e) => ({ ...e, id: uid(), blocos: e.blocos.map((b) => ({ ...b, id: uid() })) })),
+      }))),
+      concluidos: [],
+    };
+    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+    const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
+    const dadosNovo = { ...dadosAtual, planosCorrida: [novo] };
+    db.prepare('UPDATE perfis SET dados_json = ?, atualizado_em = ? WHERE id = ?').run(
+      JSON.stringify(dadosNovo),
+      new Date().toISOString(),
+      perfilId,
+    );
+    concluirJobIA(jobId);
+    await enviarPushParaPerfil(perfilId, {
+      title: 'Meu Coach',
+      body: 'Seu plano de corrida está pronto! Toque para ver.',
+      url: '/',
+    });
   }
-});
+}
 
 // ---------- Plano alimentar (semana(s)-modelo "A"/"B" repetidas/alternadas ao longo do período) ----------
 const ROTULOS_REFEICAO_PLANO = {
@@ -1142,11 +1252,51 @@ function maxTokensPlanoAlimentar(semanaModeloB, quantidadeRefeicoes) {
   return quantidadeRefeicoes <= 3 ? 56000 : 64000;
 }
 
+function normalizarNomeItem(s) {
+  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Espelha construirListaCompras de src/components/DietaTab.tsx — soma determinística das
+// quantidades (pedir pra IA somar tudo é pouco confiável, ela "desiste" no meio da agregação).
+function construirListaComprasServer(diasModelo, semanas) {
+  const repeticoesA = Math.ceil(semanas / 2);
+  const repeticoesB = Math.floor(semanas / 2);
+  const totais = new Map();
+  for (const dia of diasModelo) {
+    const mult = dia.semanaModelo === 'B' ? repeticoesB : repeticoesA;
+    for (const refeicao of dia.refeicoes) {
+      for (const item of refeicao.itens) {
+        const chave = `${normalizarNomeItem(item.nome)}|${normalizarNomeItem(item.unidade)}`;
+        const atual = totais.get(chave);
+        if (atual) atual.quantidade += item.quantidade * mult;
+        else totais.set(chave, { nome: item.nome, unidade: item.unidade, quantidade: item.quantidade * mult });
+      }
+    }
+  }
+  return [...totais.values()]
+    .map((t) => ({ nome: t.nome, quantidadeTotal: Math.round(t.quantidade * 10) / 10, unidade: t.unidade }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
 app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
-  try {
-    const { perfil, tiposRefeicao, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente } = req.body;
-    const semanas = [1, 2, 3, 4].includes(+req.body.semanas) ? +req.body.semanas : 1;
+  const jobId = criarJobIA(req.perfilId, 'plano_alimentar');
+  res.status(202).json({ jobId });
+  processarPlanoAlimentar(jobId, req.perfilId, req.body).catch((err) => {
+    console.error(err);
+    concluirJobIA(jobId, mensagemErro(err));
+    enviarPushParaPerfil(req.perfilId, {
+      title: 'Meu Coach',
+      body: 'Não consegui gerar seu plano alimentar agora. Toque para tentar de novo.',
+      url: '/',
+    }).catch(() => {});
+  });
+});
+
+async function processarPlanoAlimentar(jobId, perfilId, body) {
+  {
+    const { perfil, tiposRefeicao, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente } = body;
+    const semanas = [1, 2, 3, 4].includes(+body.semanas) ? +body.semanas : 1;
     const semanaModeloB = semanas >= 2;
     const repeticoesA = Math.ceil(semanas / 2);
     const repeticoesB = Math.floor(semanas / 2);
@@ -1190,14 +1340,73 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ${textoAtividadeRecente(atividadeRecente)}`;
 
     const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
-    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens, res });
-    res.end(JSON.stringify({ ...JSON.parse(textoDaResposta(response)), semanas }));
-  } catch (err) {
-    console.error(err);
-    if (res.headersSent) return res.end();
-    res.status(500).json({ error: mensagemErro(err) });
+    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens });
+    const resp = JSON.parse(textoDaResposta(response));
+
+    // Receitas primeiro, pra poder resolver receitaNome -> receitaId dos itens (casamento por
+    // nome normalizado — a IA não é confiável pra manter ids consistentes num JSON grande).
+    const receitas = resp.receitas.map((r) => ({ id: uid(), nome: r.nome, tempoPreparoMin: r.tempoPreparoMin, ingredientes: r.ingredientes, modoPreparo: r.modoPreparo }));
+    const receitaIdPorNome = new Map(receitas.map((r) => [normalizarNomeItem(r.nome), r.id]));
+
+    const diasModelo = resp.diasModelo.map((d) => {
+      const metaInfo = (metasPorDiaSemana ?? []).find((m) => m.diaSemana === d.diaSemana);
+      return {
+        id: uid(),
+        semanaModelo: d.semanaModelo,
+        diaSemana: d.diaSemana,
+        metaDia: metaInfo?.meta ?? null,
+        treinoNesteDia: metaInfo?.treinoNesteDia ?? false,
+        refeicoes: d.refeicoes.map((r) => ({
+          id: uid(),
+          tipo: r.tipo,
+          nomeSugerido: r.nomeSugerido,
+          horarioSugerido: r.horarioSugerido || undefined,
+          observacao: r.observacao || undefined,
+          itens: r.itens.map((i) => ({
+            id: uid(),
+            nome: i.nome,
+            quantidade: i.quantidade,
+            unidade: i.unidade,
+            calorias: i.calorias,
+            proteinas_g: i.proteinas_g,
+            carboidratos_g: i.carboidratos_g,
+            gorduras_g: i.gorduras_g,
+            receitaId: i.receitaNome ? receitaIdPorNome.get(normalizarNomeItem(i.receitaNome)) : undefined,
+          })),
+        })),
+      };
+    });
+
+    const novo = {
+      id: uid(),
+      nome: resp.nome,
+      semanas: resp.semanas ?? semanas,
+      tiposRefeicaoIncluidos: tiposRefeicao,
+      avaliacaoInicial: resp.avaliacaoInicial,
+      estrategia: resp.estrategia,
+      diasModelo,
+      receitas,
+      listaCompras: construirListaComprasServer(resp.diasModelo, resp.semanas ?? semanas).map((i) => ({ id: uid(), ...i })),
+      recomendacoesGerais: resp.recomendacoesGerais,
+      criadoEm: new Date().toISOString(),
+    };
+
+    const row = db.prepare('SELECT dados_json FROM perfis WHERE id = ?').get(perfilId);
+    const dadosAtual = { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) };
+    const dadosNovo = { ...dadosAtual, planosAlimentares: [novo] };
+    db.prepare('UPDATE perfis SET dados_json = ?, atualizado_em = ? WHERE id = ?').run(
+      JSON.stringify(dadosNovo),
+      new Date().toISOString(),
+      perfilId,
+    );
+    concluirJobIA(jobId);
+    await enviarPushParaPerfil(perfilId, {
+      title: 'Meu Coach',
+      body: 'Seu plano alimentar está pronto! Toque para ver.',
+      url: '/',
+    });
   }
-});
+}
 
 // ---------- Estimativa de calorias dos registros do dia ----------
 const SCHEMA_CALORIAS = {

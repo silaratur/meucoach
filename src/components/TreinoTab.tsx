@@ -30,6 +30,7 @@ interface Props {
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
   aoAtualizarPerfil: (p: Perfil) => void;
+  recarregarDados: () => Promise<void>;
 }
 
 // Card de avaliação do aluno — como um bom avaliador, o Coach pergunta antes de prescrever.
@@ -167,7 +168,7 @@ function AnamneseCard({ perfil, aoSalvar }: { perfil: Perfil; aoSalvar: (p: Perf
   );
 }
 
-export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil }: Props) {
+export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil, recarregarDados }: Props) {
   const [modo, setModo] = useState<'musculacao' | 'corrida'>('musculacao');
   const [treinoAtivo, setTreinoAtivo] = useState<Treino | null>(null);
   const [atividadeLivre, setAtividadeLivre] = useState('');
@@ -269,7 +270,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
       </div>
 
       {modo === 'corrida' ? (
-        <CorridaSection perfil={perfil} dados={dados} atualizar={atualizar} aoAtualizarPerfil={aoAtualizarPerfil} />
+        <CorridaSection perfil={perfil} dados={dados} atualizar={atualizar} aoAtualizarPerfil={aoAtualizarPerfil} recarregarDados={recarregarDados} />
       ) : (
         <>
       <AnamneseCard perfil={perfil} aoSalvar={aoAtualizarPerfil} />
@@ -353,6 +354,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil 
         atualizar={atualizar}
         aoComecarDia={setTreinoAtivo}
         aoMontarManualmente={() => setEditando({ id: uid(), nome: 'Meu treino', local: 'academia', exercicios: [], criadoEm: new Date().toISOString() })}
+        recarregarDados={recarregarDados}
       />
 
       <div className="cartao">

@@ -116,6 +116,20 @@ export default function App() {
     salvarPerfilRemoto(p).catch((e) => console.error('Falha ao sincronizar perfil:', e));
   }
 
+  // Rebusca perfil/dados frescos do servidor SEM fazer PUT de volta — usado depois que um job de
+  // IA em background conclui (plano de treino/corrida/dieta), pra pegar o resultado que o próprio
+  // servidor já salvou, em vez de confiar no estado local (que pode estar desatualizado se o job
+  // levou minutos e o usuário mexeu em outra coisa nesse meio tempo).
+  async function recarregarDados() {
+    try {
+      const { perfil: p, dados: d } = await buscarPerfilEDados();
+      setPerfil(p);
+      setDados(d);
+    } catch (e) {
+      console.error('Falha ao recarregar dados:', e);
+    }
+  }
+
   // Sem sessão ativa: landing de vendas (só pra visitante novo) depois login / criação de conta
   if (!ativoId || !perfil || !dados) {
     if (mostrarLanding && !carregando) {
@@ -163,9 +177,9 @@ export default function App() {
       <main className="conteudo">
         <div key={aba} className="aba-conteudo">
           {aba === 'hoje' && <DiarioTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
-          {aba === 'dieta' && <DietaTab perfil={perfil} dados={dados} atualizar={atualizarDados} />}
+          {aba === 'dieta' && <DietaTab perfil={perfil} dados={dados} atualizar={atualizarDados} recarregarDados={recarregarDados} />}
           {aba === 'treino' && (
-            <TreinoTab perfil={perfil} dados={dados} atualizar={atualizarDados} aoAtualizarPerfil={atualizarPerfil} />
+            <TreinoTab perfil={perfil} dados={dados} atualizar={atualizarDados} aoAtualizarPerfil={atualizarPerfil} recarregarDados={recarregarDados} />
           )}
           {aba === 'evolucao' && (
             <EvolucaoTab

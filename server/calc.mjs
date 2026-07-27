@@ -31,6 +31,23 @@ export function diaSemanaSaoPaulo(date = new Date()) {
   return DIAS_SEMANA_PT[nome] ?? nome;
 }
 
+const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
+// Espelha reordenarSemana1 de src/calc.ts — planos gerados por IA não sabem qual é o dia de hoje,
+// então a semana 1 às vezes vem fora de ordem. Reordena só a semana 1 pra começar no dia mais
+// próximo de hoje (hoje mesmo, se for um dos dias do plano); da semana 2 em diante não importa.
+export function reordenarSemana1(dias) {
+  const idxHoje = DIAS_SEMANA.indexOf(diaSemanaSaoPaulo());
+  const semana1 = dias.filter((d) => d.semana === 1);
+  const resto = dias.filter((d) => d.semana !== 1);
+  const comDistancia = semana1.map((d) => {
+    const idx = DIAS_SEMANA.indexOf(d.dia);
+    return { d, distancia: idx === -1 ? 999 : (idx - idxHoje + 7) % 7 };
+  });
+  comDistancia.sort((a, b) => a.distancia - b.distancia);
+  return [...comDistancia.map((x) => x.d), ...resto];
+}
+
 export function idadeDe(nascimento) {
   if (!nascimento) return undefined;
   const n = new Date(nascimento + 'T00:00:00');

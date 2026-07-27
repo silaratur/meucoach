@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import type { DadosPerfil, DiaModeloAlimentar, ItemRefeicao, Perfil, PlanoAlimentar, ReceitaPlano, RefeicaoPlano, TipoRefeicao } from '../types';
+import type { DadosPerfil, ItemRefeicao, Perfil, ReceitaPlano, RefeicaoPlano, TipoRefeicao } from '../types';
 import { DIAS_SEMANA, TIPOS_REFEICAO } from '../types';
 import { uid, hojeISO, horaAgora } from '../storage';
 import { diaSemanaHoje, metaDiaria } from '../calc';
-import { gerarPlanoAlimentar, type DiaModeloAlimentarIA, type MetaPorDiaSemana } from '../api';
+import { gerarPlanoAlimentar, type MetaPorDiaSemana } from '../api';
+import { acompanharJobIA } from '../jobs';
 import { IconeConcluido, IconeExcluir, IconeMusculacao, IconeSono, ICONE_REFEICAO } from './Icones';
 import { ChefHat, ShoppingBasket, CalendarDays, TrendingUp, Info } from 'lucide-react';
 import Markdown from './Markdown';
@@ -12,41 +13,14 @@ interface Props {
   perfil: Perfil;
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
+  recarregarDados: () => Promise<void>;
 }
 
 const REFEICOES_SELECIONAVEIS = TIPOS_REFEICAO.filter((t) => t.value !== 'suplemento');
 const PADRAO_SELECIONADO: TipoRefeicao[] = ['cafe', 'almoco', 'jantar'];
 
-function normalizarNome(s: string): string {
-  return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
 function somaItens(itens: ItemRefeicao[], campo: 'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g'): number {
   return itens.reduce((acc, i) => acc + i[campo], 0);
-}
-
-// Soma determinística das quantidades a partir do que a IA já gera de forma confiável (itens por
-// refeição) — pedir pra IA mesma somar tudo isso (testado ao vivo) é pouco confiável, ela "desiste"
-// no meio da agregação. Agrupa por nome+unidade normalizados e aplica o multiplicador de repetição
-// de cada semana-modelo (A repete em semanas ímpares, B em pares).
-function construirListaCompras(diasModelo: DiaModeloAlimentarIA[], semanas: number): { nome: string; quantidadeTotal: number; unidade: string }[] {
-  const repeticoesA = Math.ceil(semanas / 2);
-  const repeticoesB = Math.floor(semanas / 2);
-  const totais = new Map<string, { nome: string; unidade: string; quantidade: number }>();
-  for (const dia of diasModelo) {
-    const mult = dia.semanaModelo === 'B' ? repeticoesB : repeticoesA;
-    for (const refeicao of dia.refeicoes) {
-      for (const item of refeicao.itens) {
-        const chave = `${normalizarNome(item.nome)}|${normalizarNome(item.unidade)}`;
-        const atual = totais.get(chave);
-        if (atual) atual.quantidade += item.quantidade * mult;
-        else totais.set(chave, { nome: item.nome, unidade: item.unidade, quantidade: item.quantidade * mult });
-      }
-    }
-  }
-  return [...totais.values()]
-    .map((t) => ({ nome: t.nome, quantidadeTotal: Math.round(t.quantidade * 10) / 10, unidade: t.unidade }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 function textoRepeticao(semanas: number): string {
@@ -56,12 +30,13 @@ function textoRepeticao(semanas: number): string {
   return 'Semanas 1 e 3 = Cardápio A · Semanas 2 e 4 = Cardápio B.';
 }
 
-export default function DietaTab({ perfil, dados, atualizar }: Props) {
+export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: Props) {
   const [semanas, setSemanas] = useState(1);
   const [tiposSelecionados, setTiposSelecionados] = useState<TipoRefeicao[]>(PADRAO_SELECIONADO);
   const [observacoes, setObservacoes] = useState('');
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
+  const [mensagemFundo, setMensagemFundo] = useState('');
   const [modo, setModo] = useState<'cardapio' | 'compras' | 'receitas'>('cardapio');
   const [semanaModeloVista, setSemanaModeloVista] = useState<'A' | 'B'>('A');
   const [diaVisto, setDiaVisto] = useState(diaSemanaHoje());
@@ -87,62 +62,28 @@ export default function DietaTab({ perfil, dados, atualizar }: Props) {
         .map((s) => ({ data: s.data.slice(0, 10), nome: s.nomeTreino }));
       const atividadeRecente = [...dados.atividadesDiarias].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 5);
 
-      const resp = await gerarPlanoAlimentar(perfil, semanas, tiposSelecionados, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente);
-
-      // Receitas primeiro, pra poder resolver receitaNome -> receitaId dos itens (casamento por
-      // nome normalizado — a IA não é confiável pra manter ids consistentes num JSON grande).
-      const receitas: ReceitaPlano[] = resp.receitas.map((r) => ({ id: uid(), nome: r.nome, tempoPreparoMin: r.tempoPreparoMin, ingredientes: r.ingredientes, modoPreparo: r.modoPreparo }));
-      const receitaIdPorNome = new Map(receitas.map((r) => [normalizarNome(r.nome), r.id]));
-
-      const diasModelo: DiaModeloAlimentar[] = resp.diasModelo.map((d) => {
-        const metaInfo = metasPorDiaSemana.find((m) => m.diaSemana === d.diaSemana);
-        return {
-          id: uid(),
-          semanaModelo: d.semanaModelo,
-          diaSemana: d.diaSemana,
-          metaDia: metaInfo?.meta ?? null,
-          treinoNesteDia: metaInfo?.treinoNesteDia ?? false,
-          refeicoes: d.refeicoes.map((r) => ({
-            id: uid(),
-            tipo: r.tipo,
-            nomeSugerido: r.nomeSugerido,
-            horarioSugerido: r.horarioSugerido || undefined,
-            observacao: r.observacao || undefined,
-            itens: r.itens.map((i) => ({
-              id: uid(),
-              nome: i.nome,
-              quantidade: i.quantidade,
-              unidade: i.unidade,
-              calorias: i.calorias,
-              proteinas_g: i.proteinas_g,
-              carboidratos_g: i.carboidratos_g,
-              gorduras_g: i.gorduras_g,
-              receitaId: i.receitaNome ? receitaIdPorNome.get(normalizarNome(i.receitaNome)) : undefined,
-            })),
-          })),
-        };
-      });
-
-      const novo: PlanoAlimentar = {
-        id: uid(),
-        nome: resp.nome,
-        semanas: resp.semanas ?? semanas,
-        tiposRefeicaoIncluidos: tiposSelecionados,
-        avaliacaoInicial: resp.avaliacaoInicial,
-        estrategia: resp.estrategia,
-        diasModelo,
-        receitas,
-        listaCompras: construirListaCompras(resp.diasModelo, resp.semanas ?? semanas).map((i) => ({ id: uid(), ...i })),
-        recomendacoesGerais: resp.recomendacoesGerais,
-        criadoEm: new Date().toISOString(),
-      };
-      atualizar((d) => ({ ...d, planosAlimentares: [novo] }));
-      setModo('cardapio');
-      setSemanaModeloVista('A');
-      setDiaVisto(diaSemanaHoje());
+      // Plano alimentar demora — roda em background no servidor (sobrevive à tela bloqueada/app
+      // em segundo plano) em vez de segurar essa chamada esperando a IA terminar. A montagem do
+      // plano (receitas, lista de compras, resolução de receitaId) agora acontece no servidor.
+      const { jobId } = await gerarPlanoAlimentar(perfil, semanas, tiposSelecionados, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente);
+      setGerando(false);
+      setMensagemFundo('Gerando seu plano alimentar em segundo plano — pode sair da tela, eu aviso quando terminar.');
+      acompanharJobIA(
+        jobId,
+        async () => {
+          await recarregarDados();
+          setModo('cardapio');
+          setSemanaModeloVista('A');
+          setDiaVisto(diaSemanaHoje());
+          setMensagemFundo('');
+        },
+        (msg) => {
+          setErro(msg);
+          setMensagemFundo('');
+        },
+      );
     } catch (e) {
       setErro((e as Error).message);
-    } finally {
       setGerando(false);
     }
   }
@@ -221,10 +162,11 @@ export default function DietaTab({ perfil, dados, atualizar }: Props) {
 
         <div className="botoes">
           <button className="primario grande" onClick={gerar} disabled={gerando || !tiposSelecionados.length}>
-            {gerando ? <><ChefHat size={17} /> Montando seu plano... (pode levar até um minuto)</> : <><ChefHat size={17} /> Gerar plano alimentar</>}
+            {gerando ? <><ChefHat size={17} /> Iniciando geração...</> : <><ChefHat size={17} /> Gerar plano alimentar</>}
           </button>
         </div>
         {!tiposSelecionados.length && <p className="meta-texto"><Info size={14} /> Selecione pelo menos uma refeição.</p>}
+        {mensagemFundo && <p className="meta-texto"><ChefHat size={14} /> {mensagemFundo}</p>}
         {erro && <p className="erro">{erro}</p>}
       </div>
 

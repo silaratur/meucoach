@@ -99,6 +99,22 @@ CREATE TABLE IF NOT EXISTS assinaturas (
   atualizado_em TEXT NOT NULL,
   FOREIGN KEY (perfil_id) REFERENCES perfis(id)
 );
+
+-- Geração de plano por IA (musculação/corrida/dieta) roda em background no próprio processo —
+-- sem fila externa — pra sobreviver a tela bloqueada/app em segundo plano no celular. Só guarda
+-- status: o resultado vai direto pra dados_json do perfil quando conclui; o cliente recarrega os
+-- dados quando o job termina (via push ou polling em primeiro plano).
+CREATE TABLE IF NOT EXISTS jobs_ia (
+  id TEXT PRIMARY KEY,
+  perfil_id TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processando',
+  erro TEXT,
+  criado_em TEXT NOT NULL,
+  concluido_em TEXT,
+  FOREIGN KEY (perfil_id) REFERENCES perfis(id)
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_ia_perfil ON jobs_ia(perfil_id);
 `);
 
 // Migração: adiciona token_version se ainda não existir — permite invalidar todas as sessões
@@ -108,6 +124,13 @@ const colunasPerfis = db.prepare('PRAGMA table_info(perfis)').all();
 if (!colunasPerfis.some((c) => c.name === 'token_version')) {
   db.exec('ALTER TABLE perfis ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
 }
+
+// Todo job "processando" ao ligar o processo é órfão por definição — nenhuma promise em memória
+// pode corresponder a ele (o container reinicia a cada deploy). Marca como falho de uma vez, com
+// aviso, em vez de deixar o cliente esperando pra sempre por um job que nunca vai terminar.
+db.prepare(
+  "UPDATE jobs_ia SET status = 'falhou', erro = 'Interrompido por reinício do servidor.', concluido_em = ? WHERE status = 'processando'",
+).run(new Date().toISOString());
 
 // Segredo para assinar os tokens de sessão: gerado uma vez e persistido em disco
 // (assim os logins continuam válidos entre reinícios do servidor).

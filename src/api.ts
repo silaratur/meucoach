@@ -13,6 +13,23 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+async function get<T>(url: string): Promise<T> {
+  const resp = await fetch(url, { headers: cabecalhos() });
+  const data = await resp.json().catch(() => ({}));
+  if (resp.status === 401) notificarNaoAutorizado();
+  if (!resp.ok) throw new Error((data as { error?: string }).error || `Erro ${resp.status}`);
+  return data as T;
+}
+
+export interface JobIA {
+  status: 'processando' | 'concluido' | 'falhou';
+  erro?: string;
+}
+
+export function statusJobIA(jobId: string) {
+  return get<JobIA>(`/api/jobs-ia/${jobId}`);
+}
+
 // Invalida todos os tokens já emitidos pra esta conta (perde/roubo de aparelho, suspeita de
 // token vazado) — inclusive o que está fazendo esta própria chamada; o cliente precisa logar de
 // novo em qualquer aparelho depois disso.
@@ -111,7 +128,7 @@ export interface PlanoCorridaIA {
 }
 
 export function gerarPlanoCorrida(perfil: Perfil, form: FormCorrida, corridasRecentes: unknown[], musculacao: unknown) {
-  return post<PlanoCorridaIA>('/api/ai/corrida', { perfil, ...form, corridasRecentes, musculacao });
+  return post<{ jobId: string }>('/api/ai/corrida', { perfil, ...form, corridasRecentes, musculacao });
 }
 
 export interface AvaliacaoSono {
@@ -219,7 +236,7 @@ export function gerarPlano(
   avaliacaoRecente?: string,
   atividadeRecente?: unknown,
 ) {
-  return post<PlanoMensalIA>('/api/ai/plano', {
+  return post<{ jobId: string }>('/api/ai/plano', {
     perfil,
     local,
     duracaoMin,
@@ -291,7 +308,7 @@ export function gerarPlanoAlimentar(
   sessoesRecentes: unknown[],
   atividadeRecente?: unknown,
 ) {
-  return post<PlanoAlimentarIA>('/api/ai/plano-alimentar', {
+  return post<{ jobId: string }>('/api/ai/plano-alimentar', {
     perfil,
     semanas,
     tiposRefeicao,

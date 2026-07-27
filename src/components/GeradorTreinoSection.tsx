@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { DadosPerfil, LocalTreino, Perfil, PlanoMusculacao, Treino } from '../types';
+import type { DadosPerfil, LocalTreino, Perfil, Treino } from '../types';
 import { LOCAIS } from '../types';
 import { uid, hojeISO } from '../storage';
-import { dataLocalDe, reordenarSemana1 } from '../calc';
+import { dataLocalDe } from '../calc';
 import { gerarPlano, gerarTreino } from '../api';
+import { acompanharJobIA } from '../jobs';
 import { IconeComecar, IconeEditar, IconeExcluir, IconeCoach, IconeAquecimento, IconeCorrida, IconeAlongamento, IconeDica, ICONE_LOCAL } from './Icones';
 import { Zap, CalendarDays, TrendingUp, PartyPopper } from 'lucide-react';
 import Markdown from './Markdown';
@@ -30,6 +31,7 @@ interface Props {
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
   aoComecarDia: (treino: Treino) => void;
   aoMontarManualmente: () => void;
+  recarregarDados: () => Promise<void>;
 }
 
 type DuracaoPlano = '1dia' | '1semana' | '2semanas' | '1mes';
@@ -81,7 +83,7 @@ function planoAnteriorResumoDe(dados: DadosPerfil) {
   };
 }
 
-export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComecarDia, aoMontarManualmente }: Props) {
+export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComecarDia, aoMontarManualmente, recarregarDados }: Props) {
   const [duracaoPlano, setDuracaoPlano] = useState<DuracaoPlano>('1dia');
   const [local, setLocal] = useState<LocalTreino>('academia');
   const [foco, setFoco] = useState('coach');
@@ -91,6 +93,7 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
   const [duracaoTexto, setDuracaoTexto] = useState('45');
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
+  const [mensagemFundo, setMensagemFundo] = useState('');
   const [semanaSelecionada, setSemanaSelecionada] = useState<number | null>(null);
 
   const plano = dados.planosMusculacao[0] ?? null;
@@ -144,30 +147,28 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
           exercicios: t.exercicios.map((e) => ({ ...e, id: uid() })),
         };
         atualizar((d) => ({ ...d, treinos: [novo, ...d.treinos] }));
+        setGerando(false);
       } else {
         const semanas = opcaoAtual.semanas ?? 4;
-        const p = await gerarPlano(perfil, local, duracaoSessao, semanas, historico.slice(0, 30), sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, foco, avaliacaoRecente, atividadeRecente);
-        const novo: PlanoMusculacao = {
-          id: uid(),
-          nome: p.nome,
-          semanas: p.semanas ?? semanas,
-          avaliacaoInicial: p.avaliacaoInicial,
-          estrategiaMes: p.estrategiaMes,
-          recomendacoesGerais: p.recomendacoesGerais,
-          local,
-          criadoEm: new Date().toISOString(),
-          concluidos: [],
-          dias: reordenarSemana1(p.dias.map((d) => ({
-            ...d,
-            id: uid(),
-            exercicios: d.exercicios.map((e) => ({ ...e, id: uid() })),
-          }))),
-        };
-        atualizar((d) => ({ ...d, planosMusculacao: [novo] }));
+        // Plano de várias semanas demora mais — roda em background no servidor (sobrevive à tela
+        // bloqueada/app em segundo plano) em vez de segurar essa chamada esperando a IA terminar.
+        const { jobId } = await gerarPlano(perfil, local, duracaoSessao, semanas, historico.slice(0, 30), sessoesRecentes, planoCorridaResumo, planoAnteriorResumo, foco, avaliacaoRecente, atividadeRecente);
+        setGerando(false);
+        setMensagemFundo('Gerando seu plano em segundo plano — pode sair da tela, eu aviso quando terminar.');
+        acompanharJobIA(
+          jobId,
+          async () => {
+            await recarregarDados();
+            setMensagemFundo('');
+          },
+          (msg) => {
+            setErro(msg);
+            setMensagemFundo('');
+          },
+        );
       }
     } catch (e) {
       setErro((e as Error).message);
-    } finally {
       setGerando(false);
     }
   }
@@ -281,7 +282,7 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
             disabled={gerando || (duracaoPlano !== '1dia' && !perfil.diasMusculacao?.length)}
           >
             {gerando ? (
-              <><IconeCoach size={17} /> {duracaoPlano === '1dia' ? 'Montando seu treino...' : 'Montando seu plano... (pode levar até um minuto)'}</>
+              <><IconeCoach size={17} /> {duracaoPlano === '1dia' ? 'Montando seu treino...' : 'Iniciando geração...'}</>
             ) : (
               <><Zap size={17} /> {duracaoPlano === '1dia' ? 'Gerar treino' : `Gerar plano de ${opcaoAtual.label}`}</>
             )}
@@ -291,6 +292,7 @@ export default function GeradorTreinoSection({ perfil, dados, atualizar, aoComec
         {duracaoPlano !== '1dia' && !perfil.diasMusculacao?.length && (
           <p className="meta-texto"><IconeDica size={14} /> Defina seus dias de musculação na "Avaliação do aluno" acima antes de gerar.</p>
         )}
+        {mensagemFundo && <p className="meta-texto"><IconeCoach size={14} /> {mensagemFundo}</p>}
         {erro && <p className="erro">{erro}</p>}
       </div>
 

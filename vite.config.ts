@@ -21,4 +21,11 @@ export default defineConfig({
       '/api': 'http://localhost:8787',
     },
   },
+  // `vite preview` (build de produção servido localmente, usado pra testar antes de publicar)
+  // não herda o proxy de `server` — precisa do seu próprio, senão toda chamada de API vira 404.
+  preview: {
+    proxy: {
+      '/api': 'http://localhost:8787',
+    },
+  },
 })

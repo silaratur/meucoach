@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import type { DadosPerfil, DiaCorrida, Perfil, PlanoCorrida, SessaoTreino } from '../types';
+import type { DadosPerfil, DiaCorrida, Perfil, SessaoTreino } from '../types';
 import { DIAS_SEMANA } from '../types';
 import { uid } from '../storage';
-import { reordenarSemana1 } from '../calc';
 import { gerarPlanoCorrida, analisarCorridaFoto } from '../api';
+import { acompanharJobIA } from '../jobs';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
 import { MediaPicker } from './Midia';
@@ -17,12 +17,14 @@ interface Props {
   dados: DadosPerfil;
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
   aoAtualizarPerfil: (p: Perfil) => void;
+  recarregarDados: () => Promise<void>;
 }
 
-export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPerfil }: Props) {
+export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPerfil, recarregarDados }: Props) {
   const [correndo, setCorrendo] = useState<{ titulo: string; dia?: DiaCorrida } | null>(null);
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
+  const [mensagemFundo, setMensagemFundo] = useState('');
   // avaliação do corredor
   const [nivel, setNivel] = useState('iniciante — corro de vez em quando');
   const [objetivo, setObjetivo] = useState('completar 5 km');
@@ -64,25 +66,29 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
         })),
         sessoesRecentes: sessoesMusculacao,
       };
-      const p = await gerarPlanoCorrida(
+      // Plano de corrida demora — roda em background no servidor (sobrevive à tela bloqueada/app
+      // em segundo plano) em vez de segurar essa chamada esperando a IA terminar.
+      const { jobId } = await gerarPlanoCorrida(
         perfil,
         { nivelCorrida: nivel, objetivoCorrida: objetivo, diasCorrida, capacidadeAtual: capacidade, observacoes: obs },
         corridasRecentes,
         musculacao,
       );
-      const novo: PlanoCorrida = {
-        id: uid(),
-        criadoEm: new Date().toISOString(),
-        nome: p.nome,
-        objetivo: p.objetivo,
-        dicas: p.dicas,
-        dias: reordenarSemana1(p.dias.map((d) => ({ ...d, id: uid(), etapas: d.etapas?.map((e) => ({ ...e, id: uid(), blocos: e.blocos.map((b) => ({ ...b, id: uid() })) })) }))),
-        concluidos: [],
-      };
-      atualizar((d) => ({ ...d, planosCorrida: [novo] })); // um plano ativo por vez
+      setGerando(false);
+      setMensagemFundo('Gerando seu plano de corrida em segundo plano — pode sair da tela, eu aviso quando terminar.');
+      acompanharJobIA(
+        jobId,
+        async () => {
+          await recarregarDados();
+          setMensagemFundo('');
+        },
+        (msg) => {
+          setErro(msg);
+          setMensagemFundo('');
+        },
+      );
     } catch (e) {
       setErro((e as Error).message);
-    } finally {
       setGerando(false);
     }
   }
@@ -238,8 +244,9 @@ export default function CorridaSection({ perfil, dados, atualizar, aoAtualizarPe
           <textarea value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: tenho uma prova de 5k em setembro; prefiro correr de manhã" />
 
           <button className="primario grande" onClick={gerar} disabled={gerando}>
-            {gerando ? <><IconeCoach size={17} /> Montando seu plano...</> : <><Zap size={17} /> Gerar meu plano de corrida</>}
+            {gerando ? <><IconeCoach size={17} /> Iniciando geração...</> : <><Zap size={17} /> Gerar meu plano de corrida</>}
           </button>
+          {mensagemFundo && <p className="meta-texto"><IconeCoach size={14} /> {mensagemFundo}</p>}
           {erro && <p className="erro">{erro}</p>}
         </div>
       )}
