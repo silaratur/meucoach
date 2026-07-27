@@ -224,7 +224,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
 
   async function estimarDia() {
     const semEstimativa = dia.registros
-      .filter((r) => typeof r.calorias !== 'number' && r.tipo !== 'suplemento')
+      .filter((r) => typeof r.calorias !== 'number')
       .map((r) => ({ id: r.id, tipo: r.tipo, descricao: r.descricao }));
     if (!semEstimativa.length) return;
     setEstimando(true);

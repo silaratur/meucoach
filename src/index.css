@@ -1020,6 +1020,7 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .chip.gps-ok { background: var(--tom-sucesso-bg); border-color: var(--tom-sucesso-borda); color: var(--verde-escuro); }
 .chip.gps-erro { background: var(--tom-erro-bg); border-color: var(--tom-erro-borda); color: var(--vermelho); }
 .chip.gps-aguardando { background: var(--tom-atencao-bg); border-color: var(--tom-atencao-borda); color: var(--tom-atencao-texto); }
+.chip.gps-fraco { background: var(--tom-atencao-bg); border-color: var(--tom-atencao-borda); color: var(--tom-atencao-texto); }
 .dia-corrida {
   border-top: 1px solid var(--borda);
   padding: 8px 0;

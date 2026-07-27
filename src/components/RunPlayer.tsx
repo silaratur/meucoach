@@ -120,7 +120,7 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
   const [estado, setEstado] = useState<'pronto' | 'correndo' | 'pausado' | 'fim'>('pronto');
   const [distM, setDistM] = useState(0);
   const [segundos, setSegundos] = useState(0);
-  const [gpsOk, setGpsOk] = useState<'aguardando' | 'ok' | 'erro'>('aguardando');
+  const [gpsOk, setGpsOk] = useState<'aguardando' | 'ok' | 'fraco' | 'erro'>('aguardando');
   const [etapaIdx, setEtapaIdx] = useState(0);
   const [repeticao, setRepeticao] = useState(1);
   const [blocoIdx, setBlocoIdx] = useState(0);
@@ -132,6 +132,12 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
   const proximoAnuncioRef = useRef(500); // anuncia a cada 500 m
   const distRef = useRef(0);
   const segRef = useRef(0);
+  // Tempo decorrido por wall-clock (Date.now()), não por contagem de ticks do setInterval — se o
+  // navegador atrasar/agrupar os ticks (aba em segundo plano), um contador "+1 por tick" fica pra
+  // trás e distorce ritmo/velocidade (calculados como distância/tempo); recalcular a partir do
+  // relógio real corrige mesmo que os ticks tenham sido atrasados.
+  const inicioCorridaRef = useRef(0);
+  const segAcumuladosRef = useRef(0);
   const estadoRef = useRef(estado);
   estadoRef.current = estado;
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -175,21 +181,33 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
   }
 
   function aoNovaPosicao(pos: GeolocationPosition) {
-    setGpsOk('ok');
-    if (estadoRef.current !== 'correndo') return;
+    if (estadoRef.current !== 'correndo') {
+      setGpsOk('ok');
+      return;
+    }
     const c = pos.coords;
-    if (c.accuracy > 35) return; // sinal ruim — ignora
+    if (c.accuracy > 50) {
+      setGpsOk('fraco'); // sinal ruim — ignora a leitura, mas NÃO mexe na referência (ver abaixo)
+      return;
+    }
     const anterior = ultimaPosRef.current;
-    ultimaPosRef.current = pos;
-    if (!anterior) return;
+    if (!anterior) {
+      ultimaPosRef.current = pos;
+      setGpsOk('ok');
+      return;
+    }
     const passo = distanciaM(anterior.coords, c);
     const segundosEntrePontos = (pos.timestamp - anterior.timestamp) / 1000;
-    if (passo < 1) return; // parado
     // Velocidade implícita acima de ~36 km/h é humanamente impossível numa corrida — descarta
-    // como salto de GPS em vez de só limitar a distância (um salto rápido de poucos metros
-    // também é ruído e passava despercebido só checando distância, inflando o total da corrida).
+    // como salto de GPS. CRÍTICO: só promove `pos` a nova referência quando o segmento passa
+    // nessa checagem — antes, a leitura era promovida ANTES de validar, então um outlier virava a
+    // base de comparação da leitura seguinte e travava o acúmulo de distância até o ruído "se
+    // resolver sozinho" (a causa raiz de "GPS não mede distância direito").
     const velocidadeImplicitaMs = segundosEntrePontos > 0 ? passo / segundosEntrePontos : Infinity;
-    if (velocidadeImplicitaMs > 10) return;
+    setGpsOk('ok');
+    if (velocidadeImplicitaMs > 10) return; // descarta o outlier, mantém a referência anterior
+    ultimaPosRef.current = pos; // segmento plausível: agora sim vira a nova referência
+    if (passo < 1) return; // parado — referência já atualizada acima, só não soma distância
     distRef.current += passo;
     setDistM(distRef.current);
     if (!guiado && distRef.current >= proximoAnuncioRef.current) {
@@ -287,6 +305,7 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
   }
 
   function iniciar() {
+    if (estado !== 'pronto') return; // evita clique duplo duplicando watchPosition/setInterval
     if (!navigator.geolocation) {
       setGpsOk('erro');
       alert('GPS não disponível neste aparelho/navegador.');
@@ -294,6 +313,8 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
     }
     setEstado('correndo');
     manterTelaAcesa();
+    inicioCorridaRef.current = Date.now();
+    segAcumuladosRef.current = 0;
     if (guiado) {
       etapaIdxRef.current = 0;
       repeticaoRef.current = 1;
@@ -302,15 +323,19 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
     } else {
       falar(`Bora, ${perfil.nome}! ${tituloTreino ? tituloTreino + '. ' : ''}Vou te acompanhar a cada 500 metros. Boa corrida!`);
     }
-    watchRef.current = navigator.geolocation.watchPosition(aoNovaPosicao, () => setGpsOk('erro'), {
-      enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 15000,
-    });
+    watchRef.current = navigator.geolocation.watchPosition(
+      aoNovaPosicao,
+      (err) => {
+        console.error('Erro de geolocalização:', err.code, err.message);
+        setGpsOk('erro');
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
+    );
     timerRef.current = window.setInterval(() => {
       if (estadoRef.current === 'correndo') {
-        segRef.current += 1;
-        setSegundos(segRef.current);
+        const decorrido = segAcumuladosRef.current + Math.floor((Date.now() - inicioCorridaRef.current) / 1000);
+        segRef.current = decorrido;
+        setSegundos(decorrido);
         if (guiado) tickBloco();
       }
     }, 1000);
@@ -318,12 +343,14 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
 
   function pausar() {
     setEstado('pausado');
+    segAcumuladosRef.current = segRef.current; // congela o total de segundos até agora
     ultimaPosRef.current = null; // não somar o deslocamento durante a pausa
     falar('Pausado. Quando quiser, é só retomar.');
   }
 
   function retomar() {
     setEstado('correndo');
+    inicioCorridaRef.current = Date.now(); // reinicia a contagem de wall-clock a partir de agora
     falar('Retomando. Vamos!');
   }
 
@@ -372,7 +399,8 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
         <h2><IconeCorrida size={19} /> {tituloTreino || 'Corrida livre'}</h2>
         {estado !== 'pronto' && (
           <span className={`chip gps-${gpsOk}`}>
-            <Satellite size={13} /> {gpsOk === 'ok' ? 'GPS ok' : gpsOk === 'erro' ? 'Sem GPS' : 'Buscando...'}
+            <Satellite size={13} />{' '}
+            {gpsOk === 'ok' ? 'GPS ok' : gpsOk === 'erro' ? 'Sem GPS' : gpsOk === 'fraco' ? 'Sinal fraco' : 'Buscando...'}
           </span>
         )}
       </div>
