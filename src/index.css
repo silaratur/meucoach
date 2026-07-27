@@ -1,19 +1,28 @@
 /* Tema escuro é o padrão (data-theme não definido = escuro); "claro" é ativado via
    [data-theme="light"] no elemento <html> (ver src/theme.ts — aplicado a partir da
-   preferência salva no aparelho e, ao logar, de Perfil.tema). --verde-escuro virou o tom
-   CLARO do acento no tema escuro (pra texto sobre fundo escuro) — nome mantido pra não
-   precisar renomear var() em cada componente; no tema claro ele volta a ser mais escuro. */
+   preferência salva no aparelho e, ao logar, de Perfil.tema).
+   Paleta v2 (redesign "bold"): fundo quase preto + lima hiper-saturado, deliberadamente
+   afastados dos tons anteriores (cinza-azulado + verde discreto) — validado antes num
+   protótipo separado, aqui é a versão real pra rodar em produção. --verde-escuro é mantido
+   como alias do próprio --verde (nome preservado só pra não precisar renomear var() em toda
+   parte que já o usa) — nos dois temas eles são idênticos agora. --ink é a cor de TEXTO
+   correta para usar em cima de um fundo var(--verde): preto no escuro (verde é claro/lima),
+   branco no claro (verde volta a ser escuro) — sempre usar --ink em vez de branco/preto fixo
+   sobre var(--verde), senão o contraste quebra ao trocar de tema. */
 :root {
-  --verde: #22c55e;
-  --verde-escuro: #4ade80;
-  --fundo: #12141a;
-  --cartao: #1b1e26;
-  --superficie: #232833;
-  --texto: #e9ebef;
-  --texto-suave: #9aa1ac;
-  --borda: #2b2f3a;
+  --verde: #c8fa4a;
+  --verde-escuro: #c8fa4a;
+  --ink: #0c1204;
+  --fonte-serif: ui-serif, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  --fundo: #0a0c07;
+  --cartao: #14170e;
+  --superficie: #1b2013;
+  --texto: #f5f3e6;
+  --texto-suave: #93967f;
+  --borda: #2a3020;
   --vermelho: #f87171;
   --sombra-cartao: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --sombra-dura: 5px 5px 0 0 var(--verde);
   --tom-atencao-bg: #2a1c0d;
   --tom-atencao-borda: #5c3a1a;
   --tom-atencao-borda-forte: #d99a2b;
@@ -32,16 +41,18 @@
 }
 
 :root[data-theme='light'] {
-  --verde: #15803d;
-  --verde-escuro: #15803d;
-  --fundo: #eef1f4;
+  --verde: #2f7d0a;
+  --verde-escuro: #2f7d0a;
+  --ink: #ffffff;
+  --fundo: #f7f6ee;
   --cartao: #ffffff;
-  --superficie: #eef1f4;
-  --texto: #10151a;
-  --texto-suave: #5b6472;
-  --borda: #e0e4e9;
+  --superficie: #eef0e0;
+  --texto: #12150a;
+  --texto-suave: #585c47;
+  --borda: #ded9c4;
   --vermelho: #dc2626;
   --sombra-cartao: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 16px rgba(16, 24, 40, 0.06);
+  --sombra-dura: 5px 5px 0 0 var(--verde);
   --tom-atencao-bg: #fef3c7;
   --tom-atencao-borda: #fcd34d;
   --tom-atencao-borda-forte: #f59e0b;
@@ -102,7 +113,7 @@ strong { font-weight: 700; }
   gap: 8px;
   padding: 14px 16px 10px;
   background: var(--verde);
-  color: #fff;
+  color: var(--ink);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -123,6 +134,15 @@ strong { font-weight: 700; }
   padding: 16px;
   margin-bottom: 12px;
   box-shadow: var(--sombra-cartao);
+}
+/* Cartão-herói: reservado só pro cartão principal de cada aba (resumo do dia, avaliação do
+   Coach, peso/progresso, treino sugerido) — borda grossa + sombra dura ("adesivo"), o oposto
+   do .cartao comum, que fica com o tratamento sutil de sempre. É esse contraste entre 1 herói
+   e o resto calmo que cria hierarquia — aplicar em todo cartão anularia o efeito. */
+.cartao.cartao-destaque {
+  border-width: 2px;
+  border-color: var(--texto);
+  box-shadow: var(--sombra-dura);
 }
 .cartao h2 { margin: 0 0 10px; font-size: 1.05rem; }
 .cartao h3 { margin: 12px 0 6px; font-size: 0.95rem; }
@@ -184,9 +204,19 @@ h2 svg, h3 svg { margin-right: 2px; }
 button.primario {
   background: var(--verde);
   border-color: var(--verde-escuro);
-  color: #fff;
+  color: var(--ink);
   font-weight: 600;
 }
+/* CTA em destaque (o "Começar treino" da tela, não um botão pequeno de formulário) ganha o
+   mesmo tratamento de "adesivo" dos cartões-herói — borda grossa + sombra dura — pra ficar
+   claro que é A ação da tela, não mais uma entre várias. Botões .primario sem .grande (add
+   rápido, ajustes inline) ficam com o estilo simples de sempre, de propósito. */
+button.primario.grande {
+  border-width: 2px;
+  border-color: var(--texto);
+  box-shadow: var(--sombra-dura);
+}
+button.primario.grande:active { box-shadow: 2px 2px 0 0 var(--verde); transform: translate(3px, 3px); }
 /* Ação secundária, mas ainda intencional (ex.: "pular", "próximo") — outline com o acento,
    sem preenchimento. Fica entre o peso do .primario (preenchido) e do botão neutro (cinza),
    pra dar hierarquia real quando várias ações aparecem juntas na mesma tela. */
@@ -225,13 +255,13 @@ button:disabled { opacity: 0.6; }
 .pill-semana.ativa {
   background: var(--verde);
   border-color: var(--verde-escuro);
-  color: #fff;
+  color: var(--ink);
 }
-.pill-semana.ativa small { color: rgba(255, 255, 255, 0.85); }
+.pill-semana.ativa small { color: color-mix(in srgb, var(--ink) 80%, transparent); }
 .chips-tipo .chip { background: var(--superficie); border-color: var(--borda); color: var(--texto); }
 .chips-tipo .chip.ativa {
   background: var(--verde);
-  color: #fff;
+  color: var(--ink);
   border-color: var(--verde-escuro);
   font-weight: 600;
 }
@@ -386,13 +416,13 @@ button:disabled { opacity: 0.6; }
   cursor: pointer;
   font-family: inherit;
 }
-.dia-semana-item.hoje { background: rgba(34, 197, 94, 0.16); border: 1px solid var(--verde); }
+.dia-semana-item.hoje { background: color-mix(in srgb, var(--verde) 16%, transparent); border: 1px solid var(--verde); }
 .dia-semana-item.selecionado { border: 1px solid var(--texto); box-shadow: 0 0 0 1px var(--texto) inset; }
 .dia-semana-item small { color: var(--texto-suave); font-size: 0.68rem; }
 .dia-semana-item strong { font-size: 0.9rem; }
 .icones-dia { display: flex; gap: 2px; font-size: 0.95rem; margin-top: 2px; }
 .icones-dia .pendente { opacity: 0.35; }
-.icones-dia .feito { filter: drop-shadow(0 0 0 #22c55e); }
+.icones-dia .feito { filter: drop-shadow(0 0 0 var(--verde)); }
 .icones-dia .descanso { opacity: 0.4; font-size: 0.85rem; }
 .detalhe-dia-semana { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--borda); }
 
@@ -413,7 +443,7 @@ button:disabled { opacity: 0.6; }
 .rpe-pergunta { font-size: 0.9rem; margin: 10px 0 4px; }
 .rpe-escala { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin-bottom: 8px; }
 .rpe-botao { width: 34px; height: 34px; padding: 0; border-radius: 8px; }
-.rpe-botao.ativa { background: var(--verde); color: #fff; border-color: var(--verde-escuro); font-weight: 700; }
+.rpe-botao.ativa { background: var(--verde); color: var(--ink); border-color: var(--verde-escuro); font-weight: 700; }
 .banner-recorde {
   background: linear-gradient(90deg, var(--tom-atencao-bg), var(--tom-atencao-borda));
   border: 1px solid var(--tom-atencao-borda-forte);
@@ -666,7 +696,7 @@ button.destaque {
   border: none;
   background: transparent;
 }
-.chips-tipo.segmentado .chip.ativa { background: var(--verde); border-color: var(--verde); }
+.chips-tipo.segmentado .chip.ativa { background: var(--verde); border-color: var(--verde); color: var(--ink); }
 
 /* ---------- Gráficos (Evolução) ---------- */
 .grafico {
@@ -682,7 +712,7 @@ button.destaque {
 .resumo-evolucao .atencao { color: var(--tom-atencao-texto); }
 
 /* ---------- Medidor de peso & progresso (Evolução) ---------- */
-.peso-grande { font-size: 2.2rem; font-weight: 700; margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
+.peso-grande { font-family: var(--fonte-serif); font-size: 2.6rem; font-weight: 600; letter-spacing: -0.02em; margin: 4px 0 8px; font-variant-numeric: tabular-nums; }
 .medidor-peso { margin: 10px 0 4px; }
 .medidor-peso-trilha {
   height: 10px;
@@ -763,14 +793,23 @@ button.destaque {
 .lista-compacta-exercicios li { margin: 2px 0; }
 
 /* ---------- Bioimpedância / balança ---------- */
+/* Selo de sequência — antes uma caixa âmbar discreta e igual a qualquer outro aviso; agora um
+   "adesivo" chapado (fundo cheio, borda grossa, sombra dura), a única badge desse tipo na tela
+   — reforça constância como o dado mais importante antes de qualquer número, sem competir em
+   peso visual com o resto do cartão (por isso NÃO usa .cartao-destaque nem se repete). */
 .streak-texto {
+  display: block;
+  width: fit-content;
   text-align: center;
-  background: var(--tom-atencao-bg);
-  border: 1px solid var(--tom-atencao-borda);
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 0.9rem;
-  margin: 4px 0 10px;
+  background: var(--verde);
+  color: var(--ink);
+  border: 2px solid var(--texto);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin: 4px auto 14px;
+  box-shadow: 3px 3px 0 0 var(--texto);
 }
 .grade-metricas {
   display: grid;
@@ -799,7 +838,19 @@ button.destaque {
 .leitura-balanca .markdown p:last-child { margin-bottom: 0; }
 .link-video { display: inline-block; margin: 6px 0; font-size: 0.9rem; color: var(--tom-info-texto); }
 /* ---------- Carrossel de exercícios (WorkoutPlayer) ---------- */
-.carrossel-exercicios { display: flex; gap: 8px; overflow-x: auto; margin: 10px 0; padding-bottom: 2px; }
+/* Rolagem horizontal deve ser sentida, não vista — a barra padrão do navegador (cinza, grossa,
+   track visível) quebra a sensação de app nativo. Escondida (mantendo a rolagem funcional por
+   toque/mouse) + esmaecimento na borda direita como pista de "tem mais pra esse lado", em vez
+   da barra. */
+.carrossel-exercicios {
+  display: flex; gap: 8px; overflow-x: auto; margin: 10px 0; padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
+.carrossel-exercicios::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .carrossel-item { position: relative; flex: 0 0 auto; width: 56px; opacity: 0.55; transition: opacity 0.2s; }
 .carrossel-item.ativo { opacity: 1; }
 .carrossel-item.feito { opacity: 0.75; }
@@ -820,7 +871,7 @@ button.destaque {
   top: -4px;
   right: -4px;
   background: var(--verde);
-  color: #04120a;
+  color: var(--ink);
   border-radius: 50%;
   width: 18px;
   height: 18px;
@@ -1091,7 +1142,7 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
   height: 30px;
   border-radius: 999px;
   background: var(--verde);
-  color: #04120a;
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;

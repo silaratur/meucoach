@@ -169,7 +169,7 @@ export default function CoachTab({ perfil, dados, atualizar }: Props) {
 
   return (
     <div>
-      <div className="cartao">
+      <div className="cartao cartao-destaque">
         <h2><IconeCoach size={19} /> Avaliação do Coach</h2>
         <div className="resumo-duas-colunas">
           <div className="coluna-resumo">

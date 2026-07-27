@@ -517,7 +517,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
 
   return (
     <div>
-      <div className="cartao">
+      <div className="cartao cartao-destaque">
         <div className="cabecalho-avaliacao">
           <h2><IconeMusculacao size={19} /> Peso &amp; Progresso</h2>
           <button className="mini secundario" onClick={compartilharProgresso}><Share2 size={13} /> Compartilhar</button>

@@ -276,7 +276,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil,
       <AnamneseCard perfil={perfil} aoSalvar={aoAtualizarPerfil} />
 
       {proximoDia && planoAtivo && (
-        <div className="cartao">
+        <div className="cartao cartao-destaque">
           <h2><Zap size={19} /> {hojeEhDiaDeMusculacao ? 'Treino Sugerido para Hoje' : 'Próximo Treino do Seu Plano'}</h2>
           <p className="objetivo-sugerido">
             <strong>{proximoDia.objetivo}</strong> · {proximoDia.gruposMusculares} · ~{proximoDia.tempoEstimadoMin} min

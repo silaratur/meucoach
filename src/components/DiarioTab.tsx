@@ -260,7 +260,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
 
   return (
     <div>
-      <div className="cartao">
+      <div className="cartao cartao-destaque">
         <h2><CalendarDays size={19} /> {dataBonita}</h2>
         {streak > 0 && (
           <p className="streak-texto">
