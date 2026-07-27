@@ -78,6 +78,15 @@ CREATE TABLE IF NOT EXISTS push_marcadores (
   PRIMARY KEY (perfil_id, tipo)
 );
 
+-- Controle de força bruta no login: contagem de tentativas erradas de PIN por conta (nome_lower),
+-- com bloqueio temporário progressivo. Sem isso, o PIN numérico de 4-6 dígitos (10 mil a 1 milhão
+-- de combinações) é varrível por completo via requisições HTTP repetidas.
+CREATE TABLE IF NOT EXISTS tentativas_login (
+  nome_lower TEXT PRIMARY KEY,
+  tentativas INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate TEXT
+);
+
 -- Tabela órfã: era o status da assinatura mensal via Mercado Pago (removida — o app voltou a
 -- ser gratuito, com doação Pix opcional em vez de cobrança automática). Mantida só porque já
 -- tem dado real de teste em produção; não é lida nem escrita por nenhum código atual.
@@ -91,6 +100,14 @@ CREATE TABLE IF NOT EXISTS assinaturas (
   FOREIGN KEY (perfil_id) REFERENCES perfis(id)
 );
 `);
+
+// Migração: adiciona token_version se ainda não existir — permite invalidar todas as sessões
+// emitidas antes de um "sair de todos os aparelhos" (ou suspeita de token vazado), sem precisar
+// esperar a expiração do JWT.
+const colunasPerfis = db.prepare('PRAGMA table_info(perfis)').all();
+if (!colunasPerfis.some((c) => c.name === 'token_version')) {
+  db.exec('ALTER TABLE perfis ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
+}
 
 // Segredo para assinar os tokens de sessão: gerado uma vez e persistido em disco
 // (assim os logins continuam válidos entre reinícios do servidor).

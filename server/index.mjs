@@ -31,10 +31,12 @@ const DADOS_VAZIOS = { dias: {}, treinos: [], sessoes: [], avaliacoes: [], pesag
 // prepara novos recursos. Pra reabrir: apagar este bloco e as duas checagens que o usam
 // (POST /api/auth/criar e dentro de `autenticar`) — não precisa reverter o commit inteiro.
 const INSCRICOES_ABERTAS = false;
+// IDs de perfil (UUID, não identificam ninguém publicamente) — nomes reais NÃO entram aqui
+// porque este repositório é público no GitHub.
 const CONTAS_PERMITIDAS_NO_LOCKDOWN = new Set([
-  '8d897c0d-ec13-4869-ab8c-0775a0c7967b', // Marcelo V Silveira (dono)
-  'd242c53a-305a-4bb5-adaa-dac177e0602b', // André Santos Cavalcante
-  '469399c6-1466-44e0-9d90-0a973a6256f1', // Mariana
+  '8d897c0d-ec13-4869-ab8c-0775a0c7967b', // dono
+  'd242c53a-305a-4bb5-adaa-dac177e0602b',
+  '469399c6-1466-44e0-9d90-0a973a6256f1',
 ]);
 const MENSAGEM_LOCKDOWN =
   'O Meu Coach está em atualização — estamos preparando novos recursos. Novos membros serão aceitos em breve. Obrigado pela paciência!';
@@ -46,8 +48,11 @@ function validarNomePin(nome, pin) {
   return null;
 }
 
-function assinarToken(perfilId) {
-  return jwt.sign({ pid: perfilId }, JWT_SECRET, { expiresIn: '3650d' });
+// 180 dias (não 10 anos) + `tv` (token_version) no payload, checado em `autenticar` contra o
+// valor salvo no perfil — permite revogar sessões (troca de PIN, "sair de todos os aparelhos",
+// ou suspeita de token vazado) sem esperar a expiração nem derrubar todo mundo de uma vez.
+function assinarToken(perfilId, tokenVersion) {
+  return jwt.sign({ pid: perfilId, tv: tokenVersion }, JWT_SECRET, { expiresIn: '180d' });
 }
 
 app.post('/api/auth/criar', (req, res) => {
@@ -70,8 +75,43 @@ app.post('/api/auth/criar', (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, nomeLower, bcrypt.hashSync(pin, 10), JSON.stringify(perfil), JSON.stringify(DADOS_VAZIOS), agora, agora);
 
-  res.json({ token: assinarToken(id), perfil });
+  res.json({ token: assinarToken(id, 0), perfil });
 });
+
+// Limita tentativas de PIN por conta (nome_lower) — sem isso, um PIN de 4-6 dígitos é varrível
+// por completo via requisições HTTP repetidas, sem nenhum obstáculo. Bloqueio progressivo:
+// 5 erros → 1 min, dobra a cada novo erro após o desbloqueio, até um teto de 1 dia.
+const LIMITE_TENTATIVAS = 5;
+const BLOQUEIO_BASE_MS = 60 * 1000;
+const BLOQUEIO_MAX_MS = 24 * 60 * 60 * 1000;
+
+function statusBloqueio(nomeLower) {
+  const row = db.prepare('SELECT tentativas, bloqueado_ate FROM tentativas_login WHERE nome_lower = ?').get(nomeLower);
+  if (!row) return { bloqueado: false };
+  if (row.bloqueado_ate && new Date(row.bloqueado_ate).getTime() > Date.now()) {
+    return { bloqueado: true, ate: row.bloqueado_ate };
+  }
+  return { bloqueado: false, tentativas: row.tentativas };
+}
+
+function registrarTentativaFalha(nomeLower) {
+  const row = db.prepare('SELECT tentativas FROM tentativas_login WHERE nome_lower = ?').get(nomeLower);
+  const tentativas = (row?.tentativas ?? 0) + 1;
+  let bloqueadoAte = null;
+  if (tentativas >= LIMITE_TENTATIVAS) {
+    const vezes = tentativas - LIMITE_TENTATIVAS; // escalona a cada novo erro além do limite
+    const duracaoMs = Math.min(BLOQUEIO_BASE_MS * 2 ** vezes, BLOQUEIO_MAX_MS);
+    bloqueadoAte = new Date(Date.now() + duracaoMs).toISOString();
+  }
+  db.prepare(
+    `INSERT INTO tentativas_login (nome_lower, tentativas, bloqueado_ate) VALUES (?, ?, ?)
+     ON CONFLICT(nome_lower) DO UPDATE SET tentativas = excluded.tentativas, bloqueado_ate = excluded.bloqueado_ate`,
+  ).run(nomeLower, tentativas, bloqueadoAte);
+}
+
+function limparTentativas(nomeLower) {
+  db.prepare('DELETE FROM tentativas_login WHERE nome_lower = ?').run(nomeLower);
+}
 
 app.post('/api/auth/entrar', (req, res) => {
   const { nome, pin } = req.body ?? {};
@@ -79,13 +119,24 @@ app.post('/api/auth/entrar', (req, res) => {
   if (erro) return res.status(400).json({ error: erro });
 
   const nomeLower = nome.trim().toLowerCase();
-  const row = db.prepare('SELECT id, pin_hash, perfil_json, dados_json FROM perfis WHERE nome_lower = ?').get(nomeLower);
+  const bloqueio = statusBloqueio(nomeLower);
+  if (bloqueio.bloqueado) {
+    return res.status(429).json({ error: 'Muitas tentativas incorretas. Tente novamente mais tarde.' });
+  }
+
+  const row = db.prepare('SELECT id, pin_hash, perfil_json, dados_json, token_version FROM perfis WHERE nome_lower = ?').get(nomeLower);
   if (!row) return res.status(404).json({ error: 'Não encontrei ninguém com esse nome. Quer criar uma conta?' });
-  if (!bcrypt.compareSync(pin, row.pin_hash)) return res.status(401).json({ error: 'PIN incorreto.' });
+  // Checa o lockdown ANTES do PIN: se checasse depois, a resposta (401 vs 403) revelaria pra um
+  // atacante se ele acertou o PIN de uma conta fora da allowlist, mesmo sem conseguir entrar.
   if (!CONTAS_PERMITIDAS_NO_LOCKDOWN.has(row.id)) return res.status(403).json({ error: MENSAGEM_LOCKDOWN });
+  if (!bcrypt.compareSync(pin, row.pin_hash)) {
+    registrarTentativaFalha(nomeLower);
+    return res.status(401).json({ error: 'PIN incorreto.' });
+  }
+  limparTentativas(nomeLower);
 
   res.json({
-    token: assinarToken(row.id),
+    token: assinarToken(row.id, row.token_version),
     perfil: JSON.parse(row.perfil_json),
     dados: { ...DADOS_VAZIOS, ...JSON.parse(row.dados_json) },
   });
@@ -95,13 +146,28 @@ function autenticar(req, res, next) {
   const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
   if (!m) return res.status(401).json({ error: 'Não autenticado. Faça login novamente.' });
   try {
-    req.perfilId = jwt.verify(m[1], JWT_SECRET).pid;
+    const payload = jwt.verify(m[1], JWT_SECRET);
+    const row = db.prepare('SELECT token_version FROM perfis WHERE id = ?').get(payload.pid);
+    // token_version mudou (ex.: "sair de todos os aparelhos") → token antigo não vale mais,
+    // mesmo que a assinatura/expiração ainda sejam válidas.
+    if (!row || row.token_version !== payload.tv) {
+      return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
+    }
+    req.perfilId = payload.pid;
     if (!CONTAS_PERMITIDAS_NO_LOCKDOWN.has(req.perfilId)) return res.status(403).json({ error: MENSAGEM_LOCKDOWN });
     next();
   } catch {
     res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
   }
 }
+
+// Invalida todos os tokens já emitidos pra esta conta (incrementa token_version) — pra quando o
+// aparelho for perdido/roubado ou o dono suspeitar que o token vazou. O próprio pedido já usa um
+// token que vai deixar de valer; o cliente precisa logar de novo em seguida.
+app.post('/api/auth/sair-de-todos-aparelhos', autenticar, (req, res) => {
+  db.prepare('UPDATE perfis SET token_version = token_version + 1 WHERE id = ?').run(req.perfilId);
+  res.json({ ok: true });
+});
 
 // ---------- Notificações push (lembrete diário) ----------
 app.get('/api/push/chave-publica', (req, res) => {
@@ -249,15 +315,24 @@ app.delete('/api/perfil', autenticar, (req, res) => {
 });
 
 // ---------- Mídias (fotos, vídeos, áudios) ----------
+const PREFIXO_MIME_POR_TIPO = { foto: 'image/', video: 'video/', audio: 'audio/' };
+
 app.post('/api/midia', autenticar, upload.single('arquivo'), (req, res) => {
   const tipo = req.body?.tipo;
   if (!req.file || !['foto', 'video', 'audio'].includes(tipo)) {
     return res.status(400).json({ error: 'Arquivo ou tipo inválido.' });
   }
+  const mime = req.file.mimetype || '';
+  // Content-Type vem do multipart, então é controlado pelo cliente — não é uma checagem de
+  // magic bytes de verdade, mas pelo menos barra a categoria errada (ex.: enviar um HTML/SVG
+  // marcado como "foto"), incluindo SVG explicitamente (pode conter <script> mesmo como imagem).
+  if (mime === 'image/svg+xml' || !mime.startsWith(PREFIXO_MIME_POR_TIPO[tipo])) {
+    return res.status(400).json({ error: 'Tipo de arquivo não corresponde ao esperado.' });
+  }
   const id = uid();
   db.prepare(
     'INSERT INTO midias (id, perfil_id, tipo, mime, criado_em, dados) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(id, req.perfilId, tipo, req.file.mimetype || 'application/octet-stream', new Date().toISOString(), req.file.buffer);
+  ).run(id, req.perfilId, tipo, mime, new Date().toISOString(), req.file.buffer);
   res.json({ id, tipo });
 });
 

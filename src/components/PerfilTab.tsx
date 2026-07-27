@@ -6,6 +6,7 @@ import { aplicarTema } from '../theme';
 import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
 import { Moon, Sun, LogOut, Heart, Copy, Check, Bell, BellOff } from 'lucide-react';
 import { ativarLembretes, desativarLembretes, inscricaoAtiva, permissaoPush, suportaPush, testarLembrete } from '../push';
+import { sairDeTodosAparelhos } from '../api';
 
 interface Props {
   perfil: Perfil;
@@ -277,7 +278,21 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
 
       <div className="botoes conta-acoes">
         <button className="secundario" onClick={() => { if (confirm('Sair deste aparelho? Seus dados continuam salvos — é só entrar de novo com seu nome e PIN.')) aoSair(); }}>
-<LogOut size={16} /> Sair deste aparelho
+          <LogOut size={16} /> Sair deste aparelho
+        </button>
+        <button
+          className="secundario"
+          onClick={async () => {
+            if (!confirm('Sair de TODOS os aparelhos onde essa conta está logada? Útil se perdeu o celular ou desconfia que alguém mais tem acesso — você (e qualquer outro aparelho) vai precisar entrar de novo com nome e PIN.')) return;
+            try {
+              await sairDeTodosAparelhos();
+            } catch {
+              // o próprio token usado nesta chamada já foi invalidado no servidor — segue com o logout local mesmo se a resposta falhar em chegar.
+            }
+            aoSair();
+          }}
+        >
+          <LogOut size={16} /> Sair de todos os aparelhos
         </button>
       </div>
 

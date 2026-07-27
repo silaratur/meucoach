@@ -13,6 +13,13 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+// Invalida todos os tokens já emitidos pra esta conta (perde/roubo de aparelho, suspeita de
+// token vazado) — inclusive o que está fazendo esta própria chamada; o cliente precisa logar de
+// novo em qualquer aparelho depois disso.
+export function sairDeTodosAparelhos() {
+  return post<{ ok: boolean }>('/api/auth/sair-de-todos-aparelhos', {});
+}
+
 export function avaliarDia(
   perfil: Perfil,
   dia: DiaAlimentar,
