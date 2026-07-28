@@ -871,6 +871,19 @@ button.destaque {
 .leitura-balanca .markdown p:first-child { margin-top: 0; }
 .leitura-balanca .markdown p:last-child { margin-bottom: 0; }
 .link-video { display: inline-block; margin: 6px 0; font-size: 0.9rem; color: var(--tom-info-texto); }
+/* Aviso de que a descrição foi editada depois da análise da foto — macros ainda são da leitura
+   anterior até o usuário reprocessar (DiarioTab). */
+.aviso-texto-corrigido {
+  background: var(--tom-atencao-bg);
+  border: 1px solid var(--tom-atencao-borda);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+.aviso-texto-corrigido p { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--tom-atencao-texto); }
 /* ---------- Carrossel de exercícios (WorkoutPlayer) ---------- */
 /* Rolagem horizontal deve ser sentida, não vista — a barra padrão do navegador (cinza, grossa,
    track visível) quebra a sensação de app nativo. Escondida (mantendo a rolagem funcional por

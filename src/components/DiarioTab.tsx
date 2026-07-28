@@ -136,6 +136,10 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
     'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g' | 'fibras_g'
   > | null>(null);
   const [analisePendente, setAnalisePendente] = useState('');
+  // Snapshot da descrição no momento da última análise (foto ou reprocessamento) — comparado
+  // com a descrição atual (editável) pra saber se o usuário corrigiu o texto depois da leitura
+  // da IA e mostrar o botão de reprocessar só quando fizer sentido.
+  const [descricaoAnalisada, setDescricaoAnalisada] = useState('');
   const pararDitadoRef = useRef<(() => void) | null>(null);
 
   useEffect(() => () => pararDitadoRef.current?.(), []);
@@ -179,6 +183,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
     setMidiasPendentes([]);
     setMacrosPendentes(null);
     setAnalisePendente('');
+    setDescricaoAnalisada('');
     setEntradaAberta(false);
   }
 
@@ -191,7 +196,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
     }));
   }
 
-  async function analisarFotoPendente(fotoRef?: MediaRef) {
+  async function analisarFotoPendente(fotoRef?: MediaRef, correcaoTexto?: string) {
     const foto = fotoRef ?? midiasPendentes.find((m) => m.tipo === 'foto');
     if (!foto) return;
     setAnalisando(true);
@@ -201,13 +206,15 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
       if (!blob) throw new Error('Foto não encontrada.');
       const base64 = await blobParaBase64(blob);
       const rotulo = TIPOS_REFEICAO.find((t) => t.value === tipo)?.label ?? tipo;
-      const a = await analisarFoto(perfil, base64, blob.type || 'image/jpeg', rotulo);
+      const a = await analisarFoto(perfil, base64, blob.type || 'image/jpeg', rotulo, correcaoTexto);
       if (!a.ehComida) {
         setErro(a.descricao);
         setMacrosPendentes(null);
         setAnalisePendente('');
+        setDescricaoAnalisada('');
       } else {
         setDescricao(a.descricao);
+        setDescricaoAnalisada(a.descricao);
         setMacrosPendentes({
           calorias: a.calorias,
           proteinas_g: a.proteinas_g,
@@ -269,6 +276,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const saudacao = horaAtual < 12 ? 'Bom dia' : horaAtual < 18 ? 'Boa tarde' : 'Boa noite';
   const fraseDoDia = FRASES_DO_DIA[diaDoAno(new Date()) % FRASES_DO_DIA.length];
   const temFotoPendente = midiasPendentes.some((m) => m.tipo === 'foto');
+  // true quando o usuário editou a descrição depois da análise da foto — os macros/análise
+  // exibidos ainda são da leitura anterior até reprocessar.
+  const textoDivergente = !!macrosPendentes && descricao.trim() !== descricaoAnalisada.trim();
   const totais = totaisDoDia(dia.registros);
   const nomeDiaHoje = diaSemanaHoje();
   const treinoPrevistoHoje = (perfil.diasMusculacao?.includes(nomeDiaHoje) ?? false) || (perfil.diasCorrida?.includes(nomeDiaHoje) ?? false);
@@ -376,13 +386,14 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                   if (ref.tipo === 'foto' && !restante.some((x) => x.tipo === 'foto')) {
                     setMacrosPendentes(null);
                     setAnalisePendente('');
+                    setDescricaoAnalisada('');
                   }
                   return restante;
                 });
               }}
             />
             {analisando && <p className="leitura-balanca"><IconeCoach size={14} /> Olhando seu prato... a descrição chega em instantes.</p>}
-            {temFotoPendente && !analisando && (
+            {temFotoPendente && !analisando && !textoDivergente && (
               <button className="destaque" onClick={() => analisarFotoPendente()}>
                 <RefreshCw size={15} /> Analisar a foto de novo
               </button>
@@ -398,6 +409,14 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                 analise={analisePendente}
               />
             )}
+            {!analisando && textoDivergente && (
+              <div className="aviso-texto-corrigido">
+                <p><IconeDica size={14} /> Você editou a descrição — os valores acima ainda são da leitura anterior.</p>
+                <button className="destaque" onClick={() => analisarFotoPendente(undefined, descricao)}>
+                  <RefreshCw size={15} /> Reprocessar com o texto corrigido
+                </button>
+              </div>
+            )}
 
             <div className="botoes">
               <button className="primario" onClick={adicionar}><IconeAdicionar size={17} /> Registrar</button>
@@ -412,6 +431,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                   setMidiasPendentes([]);
                   setMacrosPendentes(null);
                   setAnalisePendente('');
+                  setDescricaoAnalisada('');
                 }}
               >
                 Cancelar

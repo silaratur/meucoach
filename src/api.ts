@@ -86,8 +86,8 @@ export interface AnaliseFoto {
   ehComida: boolean;
 }
 
-export function analisarFoto(perfil: Perfil, imagemBase64: string, mediaType: string, tipoRefeicao: string) {
-  return post<AnaliseFoto>('/api/ai/foto', { perfil, imagemBase64, mediaType, tipoRefeicao });
+export function analisarFoto(perfil: Perfil, imagemBase64: string, mediaType: string, tipoRefeicao: string, correcaoTexto?: string) {
+  return post<AnaliseFoto>('/api/ai/foto', { perfil, imagemBase64, mediaType, tipoRefeicao, correcaoTexto });
 }
 
 export interface FormCorrida {

@@ -1470,7 +1470,7 @@ const SCHEMA_FOTO = {
 app.post('/api/ai/foto', autenticar, async (req, res) => {
   if (!requireAI(res)) return;
   try {
-    const { perfil, imagemBase64, mediaType, tipoRefeicao } = req.body;
+    const { perfil, imagemBase64, mediaType, tipoRefeicao, correcaoTexto } = req.body;
     if (!imagemBase64) {
       res.status(400).json({ error: 'Nenhuma imagem recebida.' });
       return;
@@ -1492,7 +1492,11 @@ Analise com atenção aos detalhes:
 4. No comentário, dê uma análise nutricional objetiva da refeição (pontos fortes, pontos de atenção, relação com o objetivo do aluno).
 
 Se a imagem não for de comida, diga isso em "descricao" e marque ehComida=false.
-
+${
+  correcaoTexto
+    ? `\n## CORREÇÃO MANUAL DO ALUNO (prioridade sobre sua própria leitura visual)\nO aluno já viu sua leitura anterior desta mesma foto e corrigiu/completou a descrição dos itens: "${correcaoTexto}". Use esse texto como fonte da verdade sobre QUAIS itens estão no prato (ele pode ter corrigido um item que você leu errado, ou adicionado algo que não apareceu bem na foto) — a imagem serve agora só para você estimar porção/quantidade de cada item que ele descreveu. Se o texto dele mencionar um item que não dá pra ver na foto, estime a porção de forma razoável mesmo assim. Recalcule os macros do zero com base nessa lista corrigida, não repita os números da leitura anterior.\n`
+    : ''
+}
 ## Perfil do aluno
 ${perfilTexto(perfil)}`,
         },
