@@ -294,9 +294,26 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     }
   }
 
-  function textoDicaDescanso(ex: Exercicio): string | undefined {
+  // Última frase de "instrucoes" — pelo formato pedido à IA (posição inicial, movimento,
+  // respiração, erro comum a evitar, nessa ordem), é sempre o erro comum a evitar. Remove um
+  // prefixo "Erro comum:" já embutido na frase (comum na resposta da IA) pra não duplicar com
+  // o "Atenção na técnica:" que a gente já antepõe em textoTecnicaDescanso.
+  function erroComumDe(ex: Exercicio): string | undefined {
+    if (!ex.instrucoes) return undefined;
+    const frases = ex.instrucoes.split(/(?<=[.!?])\s+/).filter(Boolean);
+    const ultima = frases[frases.length - 1];
+    return ultima?.replace(/^erro comum:?\s*/i, '');
+  }
+
+  // Dica de técnica pro descanso: na 1ª rodada do exercício (aluno acabou de ver/ouvir menos
+  // contexto) fala a execução completa (o que fazer E o erro comum a evitar); das rodadas
+  // seguintes em diante, só reforça o erro comum — um personal de verdade repete o mesmo aviso
+  // de postura a cada série, não reexplica o exercício inteiro toda vez.
+  function textoTecnicaDescanso(ex: Exercicio, primeiraRodada: boolean): string | undefined {
+    if (primeiraRodada && ex.instrucoes) return `Dica de execução: ${ex.instrucoes}`;
+    const erro = erroComumDe(ex);
+    if (erro) return `Atenção na técnica: ${erro}`;
     if (ex.dicaRapida) return `Enquanto descansa: ${ex.dicaRapida}.`;
-    if (ex.instrucoes) return ex.instrucoes.split(/(?<=[.!?])\s/)[0];
     return undefined;
   }
 
@@ -464,12 +481,15 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     const reps = repsOverride ?? (repsFeitas ? parseInt(repsFeitas, 10) : undefined);
     const carga = cargaUsada ? parseFloat(cargaUsada.replace(',', '.')) : undefined;
     const itensIdx = exerciciosState.findIndex((e) => e.id === exAtual.id);
-    let serieAnterior: { reps?: number; cargaKg?: number } | undefined;
+    // Lê a série anterior do "itens" já renderizado (fonte confiável) ANTES de disparar o
+    // setItens abaixo — mutar uma variável de fora de dentro do updater e ler o valor logo em
+    // seguida não tem garantia de já estar sincronizado nesse ponto da função.
+    const seriesJaFeitas = itens[itensIdx]?.seriesFeitas ?? [];
+    const serieAnterior = seriesJaFeitas[seriesJaFeitas.length - 1];
     setItens((prev) => {
       const novo = [...prev];
-      const seriesJaFeitas = novo[itensIdx]?.seriesFeitas ?? [];
-      serieAnterior = seriesJaFeitas[seriesJaFeitas.length - 1];
-      novo[itensIdx] = { ...novo[itensIdx], seriesFeitas: [...seriesJaFeitas, { reps, cargaKg: carga, rir: rirAtual }] };
+      const seriesAntes = novo[itensIdx]?.seriesFeitas ?? [];
+      novo[itensIdx] = { ...novo[itensIdx], seriesFeitas: [...seriesAntes, { reps, cargaKg: carga, rir: rirAtual }] };
       return novo;
     });
     setRepsFeitas('');
@@ -505,9 +525,15 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
     falar(incentivoAleatorio());
 
-    // Prioriza uma reflexão de performance (comparando com a série anterior do mesmo exercício
-    // nesta sessão) e só cai pra dica de postura/técnica quando não há o que comparar ainda.
-    const dica = textoPerformance(reps, serieAnterior) ?? textoDicaDescanso(exAtual);
+    // Junta a reflexão de performance (quando há série anterior pra comparar nesta sessão) com
+    // a dica de técnica do exercício — um personal de verdade comenta a série E reforça a
+    // postura, não escolhe só um dos dois. Usa "rodada === 1" (estado já existente, sempre
+    // confiável) em vez de checar a variável serieAnterior aqui — ela é preenchida dentro do
+    // updater de setItens e ler seu valor de fora não tem garantia de já estar sincronizado
+    // neste ponto da função.
+    const performance = textoPerformance(reps, serieAnterior);
+    const tecnica = textoTecnicaDescanso(exAtual, rodada === 1);
+    const dica = [performance, tecnica].filter(Boolean).join(' ') || undefined;
     const proximo = textoProximoDescanso();
     const descansoSeg = exAtual.descansoSeg || perfil.descansoPadraoSeg;
 
