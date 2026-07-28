@@ -13,6 +13,25 @@ import { CalendarDays, RefreshCw, Calculator, Flame, Beef, Wheat, Droplet } from
 function OBJETIVO_LABEL(v: string): string {
   return OBJETIVOS.find((o) => o.value === v)?.label.split(' (')[0] ?? v;
 }
+
+// Frase do dia: rotação estática por dia do ano (sem custo/latência de IA) — um lembrete curto
+// de constância, no mesmo tom da persona do Coach (elogia/encoraja antes de cobrar).
+const FRASES_DO_DIA = [
+  'Consistência bate motivação — apareça hoje, mesmo sem vontade.',
+  'Um dia de cada vez. O que importa é não parar.',
+  'Progresso não é linear — confie no processo.',
+  'Pequenos passos todos os dias valem mais que grandes esforços de vez em quando.',
+  'Você não precisa estar motivado, só precisa começar.',
+  'Disciplina é fazer o que precisa ser feito, mesmo sem vontade.',
+  'Cada refeição registrada é um dado a seu favor.',
+  'O resultado que você quer se constrói nos dias difíceis.',
+  'Constância é o segredo que ninguém quer ouvir, mas todo mundo devia praticar.',
+  'Hoje é só mais um tijolo na parede — continue construindo.',
+];
+function diaDoAno(d: Date): number {
+  const inicio = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d.getTime() - inicio.getTime()) / 86400000);
+}
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, obterMidia, urlMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
@@ -246,6 +265,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   }
 
   const dataBonita = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const horaAtual = new Date().getHours();
+  const saudacao = horaAtual < 12 ? 'Bom dia' : horaAtual < 18 ? 'Boa tarde' : 'Boa noite';
+  const fraseDoDia = FRASES_DO_DIA[diaDoAno(new Date()) % FRASES_DO_DIA.length];
   const temFotoPendente = midiasPendentes.some((m) => m.tipo === 'foto');
   const totais = totaisDoDia(dia.registros);
   const nomeDiaHoje = diaSemanaHoje();
@@ -261,7 +283,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   return (
     <div>
       <div className="cartao cartao-destaque">
-        <h2><CalendarDays size={19} /> {dataBonita}</h2>
+        <p className="ola-eyebrow">Seu dia</p>
+        <h2 className="ola-saudacao">{saudacao}, {perfil.nome.split(' ')[0]}</h2>
+        <p className="ola-data"><CalendarDays size={14} /> {dataBonita}</p>
         {streak > 0 && (
           <p className="streak-texto">
             <Flame size={15} /> Sequência de <strong>{streak}</strong> {streak === 1 ? 'dia ativo' : 'dias ativos'}!
@@ -396,6 +420,11 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
           </>
         )}
         {erro && <p className="erro">{erro}</p>}
+      </div>
+
+      <div className="cartao frase-dia">
+        <p>&ldquo;{fraseDoDia}&rdquo;</p>
+        <span>— frase do dia, seu Coach</span>
       </div>
 
       {sugestoes && (

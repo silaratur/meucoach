@@ -1,14 +1,35 @@
 import { useMemo, useState } from 'react';
-import type { DadosPerfil, Perfil, Pesagem } from '../types';
+import type { DadosPerfil, Perfil, Pesagem, SessaoTreino } from '../types';
 import { hojeISO } from '../storage';
-import { recordesPessoais, streakDias } from '../calc';
+import { recordesPessoais, streakDias, dataLocalDe } from '../calc';
 import { analisarAtividadeFoto, analisarBalanca, avaliarSono } from '../api';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
 import { MediaGallery, MediaPicker } from './Midia';
 import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
 import Markdown from './Markdown';
-import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2 } from 'lucide-react';
+import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2, Flame, Camera as IconeFotoComparar } from 'lucide-react';
+
+// Grade de constância (estilo "calendário de contribuições") — últimas N semanas, nível de
+// atividade por dia (0 = nada, 3 = 3+ treinos). Usa só dados.sessoes, já calculado; não
+// depende do diário (evita acoplar a estrutura mais complexa de refeições aqui).
+function gradeConstancia(sessoes: SessaoTreino[], semanas = 6): { chave: string; nivel: 0 | 1 | 2 | 3 }[] {
+  const contagem = new Map<string, number>();
+  for (const s of sessoes) {
+    const chave = dataLocalDe(s.data);
+    contagem.set(chave, (contagem.get(chave) ?? 0) + 1);
+  }
+  const hoje = new Date();
+  const dias = semanas * 7;
+  const grade: { chave: string; nivel: 0 | 1 | 2 | 3 }[] = [];
+  for (let i = dias - 1; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - i);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const n = contagem.get(chave) ?? 0;
+    grade.push({ chave, nivel: n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3 });
+  }
+  return grade;
+}
 
 interface Props {
   perfil: Perfil;
@@ -371,6 +392,8 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
   // ----- recordes pessoais -----
   const recordes = useMemo(() => recordesPessoais(dados.sessoes), [dados.sessoes]);
   const streak = streakDias(dados.sessoes);
+  const recordeRecente = recordes[0] && (Date.now() - new Date(recordes[0].data).getTime()) / 86400000 <= 7 ? recordes[0] : undefined;
+  const grade = useMemo(() => gradeConstancia(dados.sessoes), [dados.sessoes]);
 
   // ----- progressão de carga por exercício -----
   const exerciciosComCarga = useMemo(() => {
@@ -581,6 +604,48 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
           />
           <button className="primario" onClick={registrarPeso}><IconeAdicionar size={17} /></button>
         </div>
+      </div>
+
+      {(streak >= 7 || recordeRecente || (pesagens.length > 1 && variacao !== 0)) && (
+        <div className="cartao">
+          <h3><Trophy size={16} /> Conquistas recentes</h3>
+          <div className="badges-linha">
+            {streak >= 7 && (
+              <div className="badge-conquista"><Flame size={18} /><span>{streak} dias seguidos</span></div>
+            )}
+            {recordeRecente && (
+              <div className="badge-conquista"><Trophy size={18} /><span>Novo recorde: {recordeRecente.nome}</span></div>
+            )}
+            {pesagens.length > 1 && variacao !== 0 && (
+              <div className="badge-conquista"><TrendingDown size={18} /><span>{variacao > 0 ? '+' : ''}{variacao.toFixed(1)}kg desde o início</span></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="cartao">
+        <h3>Constância — últimas semanas</h3>
+        <div className="grade-constancia">
+          {grade.map((dia) => (
+            <i key={dia.chave} className={`nivel-${dia.nivel}`} title={dia.chave} />
+          ))}
+        </div>
+        <p className="meta-texto">{grade.filter((d) => d.nivel > 0).length} dos últimos {grade.length} dias com pelo menos um treino</p>
+      </div>
+
+      <div className="cartao">
+        <h3><IconeFotoComparar size={16} /> Antes / depois</h3>
+        <div className="comparar-fotos">
+          <div className="comparar-slot">
+            <IconeFotoComparar size={20} />
+            <span>Foto inicial</span>
+          </div>
+          <div className="comparar-slot">
+            <IconeFotoComparar size={20} />
+            <span>Foto mais recente</span>
+          </div>
+        </div>
+        <p className="meta-texto">Registre fotos da balança (acima) em datas diferentes pra comparar sua evolução visualmente aqui.</p>
       </div>
 
       {ultimaComDetalhe && (

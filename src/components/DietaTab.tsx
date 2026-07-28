@@ -290,7 +290,10 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
 
           {modo === 'compras' && (
             <>
-              <p className="meta-texto">Quantidade total para o período inteiro do plano, já somando as repetições das semanas-modelo.</p>
+              <div className="resumo-lista-compras">
+                <span className="resumo-lista-compras-num">{plano.listaCompras.length}</span>
+                <span className="meta-texto">itens · quantidade total pro período inteiro, já somando as repetições das semanas-modelo</span>
+              </div>
               {plano.listaCompras.map((i) => (
                 <p key={i.id} className="lista-compras-item">
                   <span>{i.nome}</span>

@@ -72,6 +72,18 @@
 
 * { box-sizing: border-box; }
 
+/* Utilitário pra qualquer fileira de rolagem horizontal nova (recordes, badges, etc.) — mesma
+   regra já usada no carrossel de exercícios: sem barra nativa, com esmaecimento na borda como
+   pista de "tem mais conteúdo" no lugar dela. */
+.rolagem-suave {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
+.rolagem-suave::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -146,6 +158,22 @@ strong { font-weight: 700; }
 }
 .cartao h2 { margin: 0 0 10px; font-size: 1.05rem; }
 .cartao h3 { margin: 12px 0 6px; font-size: 0.95rem; }
+
+/* ---------- Saudação (topo do cartão-herói de Hoje) ---------- */
+.ola-eyebrow { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--verde); font-weight: 800; margin: 0; }
+.ola-saudacao { margin: 2px 0 2px; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.01em; }
+.ola-data { margin: 0 0 10px; font-size: 0.78rem; color: var(--texto-suave); display: flex; align-items: center; gap: 5px; }
+
+/* Frase do dia: bloco chapado de tinta lima, o único momento "cartaz" fora do cartão-herói —
+   contraste alto de propósito, pra parecer citação de capa, não rodapé cinza. */
+.frase-dia {
+  background: var(--verde);
+  color: var(--ink);
+  border: 2px solid var(--texto);
+  box-shadow: var(--sombra-dura);
+}
+.frase-dia p { font-family: var(--fonte-serif); font-style: italic; font-size: 1.02rem; margin: 0 0 8px; line-height: 1.4; }
+.frase-dia span { font-size: 0.75rem; font-weight: 700; opacity: 0.75; }
 
 label {
   display: block;
@@ -842,6 +870,38 @@ button.destaque {
    track visível) quebra a sensação de app nativo. Escondida (mantendo a rolagem funcional por
    toque/mouse) + esmaecimento na borda direita como pista de "tem mais pra esse lado", em vez
    da barra. */
+/* ---------- Conquistas / badges (Evolução) ---------- */
+.badges-linha { display: flex; gap: 10px; flex-wrap: wrap; }
+.badge-conquista {
+  flex: 1 1 auto; min-width: 90px; text-align: center; background: var(--superficie);
+  border-radius: 10px; padding: 10px 8px;
+}
+.badge-conquista svg { color: var(--tom-atencao-texto); margin-bottom: 4px; }
+.badge-conquista span { display: block; font-size: 0.68rem; color: var(--texto-suave); }
+
+/* ---------- Grade de constância estilo "calendário de contribuições" (Evolução) ---------- */
+.grade-constancia { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; margin: 8px 0 2px; }
+.grade-constancia i { display: block; aspect-ratio: 1; border-radius: 3px; background: var(--borda); }
+.grade-constancia i.nivel-1 { background: color-mix(in srgb, var(--verde) 35%, var(--borda)); }
+.grade-constancia i.nivel-2 { background: color-mix(in srgb, var(--verde) 65%, var(--borda)); }
+.grade-constancia i.nivel-3 { background: var(--verde); }
+
+/* ---------- Antes / depois (placeholder até haver 2+ fotos, Evolução) ---------- */
+.comparar-fotos { display: flex; gap: 10px; margin: 6px 0; }
+.comparar-slot {
+  flex: 1; aspect-ratio: 3/4; border: 1.5px dashed var(--borda); border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+  color: var(--texto-suave); font-size: 0.72rem; text-align: center; padding: 10px;
+}
+
+/* ---------- Recordes pessoais em destaque (Treino) ---------- */
+.recordes-tira { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.recorde-chip {
+  flex: 0 0 auto; min-width: 96px; background: var(--superficie); border-radius: 10px; padding: 8px 12px;
+}
+.recorde-chip-nome { font-size: 0.68rem; color: var(--texto-suave); white-space: nowrap; }
+.recorde-chip-peso { font-family: var(--fonte-serif); font-size: 1.15rem; color: var(--verde); }
+
 .carrossel-exercicios {
   display: flex; gap: 8px; overflow-x: auto; margin: 10px 0; padding-bottom: 2px;
   -webkit-overflow-scrolling: touch;
@@ -1195,3 +1255,7 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
   border-top: 1px solid var(--borda);
 }
 .lista-compras-item span:last-child { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+.resumo-lista-compras { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+.resumo-lista-compras-num { font-family: var(--fonte-serif); font-size: 1.8rem; color: var(--verde); line-height: 1; }
+.resumo-lista-compras .meta-texto { margin: 0; }

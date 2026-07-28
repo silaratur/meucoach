@@ -4,7 +4,7 @@ import { OBJETIVOS, SUPLEMENTOS_COMUNS } from '../types';
 import { idadeDe } from '../calc';
 import { aplicarTema } from '../theme';
 import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
-import { Moon, Sun, LogOut, Heart, Copy, Check, Bell, BellOff } from 'lucide-react';
+import { Moon, Sun, LogOut, Heart, Copy, Check, Bell, BellOff, HelpCircle } from 'lucide-react';
 import { ativarLembretes, desativarLembretes, inscricaoAtiva, permissaoPush, suportaPush, testarLembrete } from '../push';
 import { sairDeTodosAparelhos } from '../api';
 
@@ -21,6 +21,34 @@ interface Props {
 const PIX_CHAVE = '02563586720';
 const PIX_CHAVE_FORMATADA = '025.635.867-20';
 const PIX_NOME = 'Marcelo V Silveira';
+
+function AjudaCard() {
+  return (
+    <div className="cartao">
+      <h2><HelpCircle size={19} /> Ajuda &amp; perguntas frequentes</h2>
+      <details className="landing-faq-item">
+        <summary>Meus dados estão seguros?</summary>
+        <p>Sim — protegidos por PIN (que nem a gente vê) e cada conta só acessa os próprios dados, nunca os de outra pessoa.</p>
+      </details>
+      <details className="landing-faq-item">
+        <summary>Por que às vezes demora pra gerar meu treino ou dieta?</summary>
+        <p>Planos de várias semanas exigem mais elaboração da IA. Pode sair da tela e continuar usando o app — a gente avisa por notificação quando ficar pronto.</p>
+      </details>
+      <details className="landing-faq-item">
+        <summary>Posso usar em mais de um aparelho?</summary>
+        <p>Sim, basta entrar com o mesmo nome e PIN em qualquer aparelho — os dados são os mesmos em todos.</p>
+      </details>
+      <details className="landing-faq-item">
+        <summary>O app funciona sem internet?</summary>
+        <p>Não totalmente: é preciso conexão para salvar seus dados no servidor e para as funções que usam IA. Sem internet, o que você registrar pode não ser salvo.</p>
+      </details>
+      <details className="landing-faq-item">
+        <summary>Como cancelo minha conta?</summary>
+        <p>Mais abaixo nesta tela, em "Excluir minha conta e todos os dados". A ação é permanente e apaga tudo.</p>
+      </details>
+    </div>
+  );
+}
 
 function ApoioCard() {
   const [copiado, setCopiado] = useState(false);
@@ -315,6 +343,7 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
       </div>
     </div>
     <LembretesCard />
+    <AjudaCard />
     <ApoioCard />
     </>
   );

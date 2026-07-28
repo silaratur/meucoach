@@ -4,7 +4,7 @@ import { DIAS_SEMANA, HORARIOS_TREINO, LOCAIS, NIVEIS_EXPERIENCIA } from '../typ
 import CorridaSection from './CorridaSection';
 import { uid } from '../storage';
 import { excluirMidias } from '../media';
-import { diaSemanaHoje, linkVideoExercicio, grupoCorporal } from '../calc';
+import { diaSemanaHoje, linkVideoExercicio, grupoCorporal, recordesPessoais } from '../calc';
 import { MediaGallery, MediaPicker } from './Midia';
 import WorkoutPlayer from './WorkoutPlayer';
 import VisaoSemana from './VisaoSemana';
@@ -23,7 +23,7 @@ import {
   IconeDica,
   ICONE_LOCAL,
 } from './Icones';
-import { AlertTriangle, Repeat, Zap, MessageCircle, Link2 } from 'lucide-react';
+import { AlertTriangle, Repeat, Zap, MessageCircle, Link2, Trophy } from 'lucide-react';
 
 interface Props {
   perfil: Perfil;
@@ -180,6 +180,7 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil,
   const planoAtivo = dados.planosMusculacao[0];
   const proximoDia = planoAtivo?.dias.find((d) => !planoAtivo.concluidos.includes(d.id));
   const hojeEhDiaDeMusculacao = perfil.diasMusculacao?.includes(diaSemanaHoje()) ?? false;
+  const recordesTreino = recordesPessoais(dados.sessoes).slice(0, 6);
 
   function iniciarTreinoSugerido() {
     if (!planoAtivo || !proximoDia) return;
@@ -287,6 +288,20 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil,
             ))}
           </ol>
           <button className="primario grande" onClick={iniciarTreinoSugerido}><IconeComecar size={17} /> Iniciar Treino</button>
+        </div>
+      )}
+
+      {recordesTreino.length > 0 && (
+        <div className="cartao">
+          <h3><Trophy size={16} /> Seus recordes</h3>
+          <div className="recordes-tira rolagem-suave">
+            {recordesTreino.map((r) => (
+              <div key={r.nome} className="recorde-chip">
+                <div className="recorde-chip-nome">{r.nome}</div>
+                <div className="recorde-chip-peso">{r.cargaKg}kg</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
