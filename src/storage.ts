@@ -46,8 +46,12 @@ export async function excluirContaRemota(): Promise<void> {
 }
 
 // ---------- Recomendação de carga ----------
-// Procura o exercício (por nome) nas sessões mais recentes e sugere a próxima carga:
-// se completou todas as séries, sobe ~2.5% (mín. 1 kg); senão mantém.
+// Procura o exercício (por nome) nas sessões mais recentes e sugere a próxima carga. Antes só
+// olhava "completou todas as reps?" — agora também usa o RIR (repetições em reserva) coletado
+// na série final da última vez: RIR baixo (perto da falha) seguraa progressão mesmo tendo
+// completado; RIR alto (sobrou fôlego) libera subir mais que o padrão de 2,5%. Sem RIR registrado
+// (sessões antigas, ou controle que ainda não chegou na série final), cai no comportamento de
+// sempre: sobe ~2,5% se completou, mantém se não completou.
 export function cargaRecomendada(sessoes: SessaoTreino[], nomeExercicio: string): { cargaKg?: number; motivo: string } {
   const nome = nomeExercicio.trim().toLowerCase();
   const ordenadas = [...sessoes].sort((a, b) => b.data.localeCompare(a.data));
@@ -58,12 +62,21 @@ export function cargaRecomendada(sessoes: SessaoTreino[], nomeExercicio: string)
     if (!cargas.length) return { motivo: 'Sem carga registrada da última vez — anote hoje para eu acompanhar.' };
     const ultima = Math.max(...cargas);
     const completou = item.seriesFeitas.length > 0 && item.seriesFeitas.every((s) => (s.reps ?? 0) > 0);
-    if (completou) {
-      const nova = Math.round((ultima * 1.025 + Number.EPSILON) * 2) / 2;
-      const sugerida = Math.max(nova, ultima + 1);
-      return { cargaKg: sugerida, motivo: `Última vez: ${ultima} kg completando tudo. Bora subir!` };
+    if (!completou) {
+      return { cargaKg: ultima, motivo: `Mantenha ${ultima} kg e capriche na execução.` };
     }
-    return { cargaKg: ultima, motivo: `Mantenha ${ultima} kg e capriche na execução.` };
+    const rirUltima = item.seriesFeitas[item.seriesFeitas.length - 1]?.rir;
+    if (rirUltima != null && rirUltima <= 1) {
+      return { cargaKg: ultima, motivo: `Última vez: ${ultima} kg bem perto da falha (RIR ${rirUltima}). Mantenha essa carga e capriche na execução hoje.` };
+    }
+    if (rirUltima != null && rirUltima >= 4) {
+      const nova = Math.round((ultima * 1.05 + Number.EPSILON) * 2) / 2;
+      const sugerida = Math.max(nova, ultima + 2);
+      return { cargaKg: sugerida, motivo: `Última vez: ${ultima} kg sobrando fôlego (RIR ${rirUltima}). Pode subir mais hoje!` };
+    }
+    const nova = Math.round((ultima * 1.025 + Number.EPSILON) * 2) / 2;
+    const sugerida = Math.max(nova, ultima + 1);
+    return { cargaKg: sugerida, motivo: `Última vez: ${ultima} kg completando tudo. Bora subir!` };
   }
   return { motivo: 'Primeira vez neste exercício — comece com carga confortável e anote.' };
 }

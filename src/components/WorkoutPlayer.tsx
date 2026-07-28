@@ -31,31 +31,78 @@ import {
   IconeMusculacao,
   ICONE_EQUIPAMENTO,
 } from './Icones';
-import { Trophy, Volume2, VolumeX, Rocket, Wind, Smile, ThumbsUp, PersonStanding, Clapperboard, PartyPopper, Flame, X } from 'lucide-react';
+import { Trophy, Volume2, VolumeX, Rocket, Wind, Smile, ThumbsUp, PersonStanding, Clapperboard, PartyPopper, Flame, X, ArrowLeft } from 'lucide-react';
 
 // Carrossel horizontal com todos os exercícios do treino — destaca o atual e marca os já
 // concluídos (todas as rodadas feitas), pra dar visão do treino inteiro, não só da estação atual.
+// Clicável: tocar num exercício diferente do ativo abre uma visualização de leitura (ver
+// CartaoPeekExercicio) sem tirar o exercício/descanso real do lugar.
 function CarrosselExercicios({
   exercicios,
   atualId,
+  peekId,
   feito,
+  aoSelecionar,
 }: {
   exercicios: Exercicio[];
   atualId: string | undefined;
+  peekId: string | undefined;
   feito: (ex: Exercicio) => boolean;
+  aoSelecionar: (id: string) => void;
 }) {
   return (
-    <div className="carrossel-exercicios">
+    <div className="carrossel-exercicios rolagem-suave">
       {exercicios.map((ex) => {
         const Icone = ICONE_EQUIPAMENTO[tipoEquipamento(ex.nome)];
+        const visualizando = ex.id === (peekId ?? atualId);
         return (
-          <div key={ex.id} className={`carrossel-item ${ex.id === atualId ? 'ativo' : ''} ${feito(ex) ? 'feito' : ''}`}>
+          <button
+            type="button"
+            key={ex.id}
+            className={`carrossel-item ${ex.id === atualId ? 'ativo' : ''} ${visualizando ? 'visualizando' : ''} ${feito(ex) ? 'feito' : ''}`}
+            title={ex.nome}
+            onClick={() => aoSelecionar(ex.id)}
+          >
             <div className="carrossel-item-icone"><Icone size={22} /></div>
+            <span className="carrossel-item-nome">{ex.nome}</span>
             {feito(ex) && <span className="carrossel-check"><IconeConcluido size={14} /></span>}
-          </div>
+          </button>
         );
       })}
     </div>
+  );
+}
+
+// Cartão de leitura de outro exercício do treino, aberto pelo carrossel durante o exercício/
+// descanso ativo — mostra nome, alvo e histórico, mas nada aqui é editável (não é o exercício
+// que está realmente em andamento). "Voltar" fecha e volta a mostrar o exercício ativo de verdade.
+function CartaoPeekExercicio({ exercicio, sessoes, aoFechar }: { exercicio: Exercicio; sessoes: SessaoTreino[]; aoFechar: () => void }) {
+  const historico = ultimasSeriesDoExercicio(sessoes, exercicio.nome);
+  const Icone = ICONE_EQUIPAMENTO[tipoEquipamento(exercicio.nome)];
+  return (
+    <>
+      <p className="progresso">Visualizando outro exercício do treino</p>
+      <h3 className="nome-exercicio"><Icone size={17} /> {exercicio.nome}</h3>
+      <p className="serie-info">{exercicio.series}×{exercicio.repeticoes} repetições</p>
+      {exercicio.instrucoes && <p className="instrucao"><IconeDica size={14} /> {exercicio.instrucoes}</p>}
+      <div className="historico-exercicio">
+        {historico.length === 0 ? (
+          <p className="historico-vazio">Sem histórico anterior deste exercício ainda.</p>
+        ) : (
+          historico.map((h, idx) => (
+            <div className="historico-item" key={idx}>
+              <span className="historico-data">{new Date(h.data).toLocaleDateString('pt-BR')}</span>
+              <span className="historico-series">
+                {h.seriesFeitas.map((s) => `${s.reps ?? '—'}×${s.cargaKg ?? '—'}kg${s.rir != null ? ` (RIR ${s.rir})` : ''}`).join(' · ')}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+      <button className="secundario" style={{ width: '100%' }} onClick={aoFechar}>
+        <ArrowLeft size={16} /> Voltar ao exercício atual
+      </button>
+    </>
   );
 }
 
@@ -130,6 +177,10 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   // ao concluir. Não reseta entre rodadas do mesmo exercício (só ao trocar de estação), pra
   // manter o último valor como ponto de partida — é normal o RIR cair perto do fim do exercício.
   const [rirAtual, setRirAtual] = useState(2);
+  // Visualização de outro exercício do treino (carrossel) sem sair do exercício/descanso real em
+  // andamento — puramente de leitura: não mexe em blocoIdx/estacaoIdx/rodada nem no cronômetro de
+  // descanso, que continuam rodando por baixo (o popup de descanso fica fora deste "modo peek").
+  const [idPeek, setIdPeek] = useState<string | null>(null);
 
   const inicioRef = useRef(Date.now());
   const timerRef = useRef<number | null>(null);
@@ -151,10 +202,17 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const emEstadoPronto = fase === 'exercicio' && !preparando && !guiando;
   const exAtualIdx = exAtual ? exerciciosState.findIndex((e) => e.id === exAtual.id) : -1;
   const emPopup = fase === 'descanso' || preparando || guiando;
+  const exercicioPeek = idPeek ? exerciciosState.find((e) => e.id === idPeek) : undefined;
 
   useEffect(() => {
     setMostrarHistorico(false);
   }, [blocoIdx, estacaoIdx]);
+
+  // Some sozinho ao avançar de verdade pra próxima estação/rodada — não deve sobreviver a uma
+  // mudança real no exercício ativo, só ao "espiar" outro sem avançar.
+  useEffect(() => {
+    setIdPeek(null);
+  }, [exAtual?.id]);
 
   // Mantém a tela do celular acesa durante todo o treino (Wake Lock).
   async function manterTelaAcesa() {
@@ -669,11 +727,17 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
             <CarrosselExercicios
               exercicios={exerciciosState}
               atualId={exAtual.id}
+              peekId={idPeek ?? undefined}
+              aoSelecionar={(id) => setIdPeek((atual) => (id === exAtual.id || id === atual ? null : id))}
               feito={(ex) => {
                 const idx = exerciciosState.findIndex((e) => e.id === ex.id);
                 return (itens[idx]?.seriesFeitas.length ?? 0) >= ex.series;
               }}
             />
+            {exercicioPeek ? (
+              <CartaoPeekExercicio exercicio={exercicioPeek} sessoes={sessoes} aoFechar={() => setIdPeek(null)} />
+            ) : (
+              <>
             <p className="progresso">
               Bloco {blocoIdx + 1} de {blocos.length}
               {ehSuperset && ` · Estação ${estacaoIdx + 1} de ${blocoAtual.exercicios.length}`}
@@ -763,7 +827,12 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
                           placeholder={exAtual.cargaSugerida || '—'}
                         />
                       ) : (
-                        <span className="celula-serie celula-serie-fixa">{serieFeita?.cargaKg ?? cargaUsada ?? '—'}</span>
+                        // Só mostra peso já REGISTRADO nesta linha — nunca o valor digitado na linha
+                        // atual (cargaUsada). Antes, uma série ainda não feita (ou já feita sem peso
+                        // anotado) herdava o número da série ativa, dando a entender que aquele peso
+                        // já estava "decidido" pra ela — confuso principalmente num exercício sem
+                        // histórico nenhum, onde nada deveria aparecer até a série realmente acontecer.
+                        <span className="celula-serie celula-serie-fixa">{serieFeita?.cargaKg ?? '—'}</span>
                       )}
                     </span>
                     <span>
@@ -790,6 +859,8 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
                 );
               })}
             </div>
+              </>
+            )}
 
             {emPopup ? (
               <div className="popup-descanso">

@@ -49,7 +49,7 @@ import {
   StretchHorizontal,
   Dumbbell,
   Link2,
-  Settings,
+  Layers,
   PersonStanding,
 } from 'lucide-react';
 import type { LocalTreino, TipoRefeicao } from '../types';
@@ -92,9 +92,11 @@ export const ICONE_LOCAL: Record<LocalTreino, typeof Coffee> = {
 
 // Ícone de equipamento por categoria inferida (ver tipoEquipamento em calc.ts) — usado no
 // lugar do emoji que antes aparecia junto ao nome do exercício durante o treino guiado.
+// "maquina" usava um ícone de engrenagem (Settings) — lia como "configurações do app", não como
+// equipamento de academia; Layers (placas empilhadas) evoca melhor uma máquina de peso guiado.
 export const ICONE_EQUIPAMENTO: Record<TipoEquipamento, typeof Coffee> = {
   cabo: Link2,
-  maquina: Settings,
+  maquina: Layers,
   peso_livre: Dumbbell,
   suspensao: PersonStanding,
   cardio: Footprints,
