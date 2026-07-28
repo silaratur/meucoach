@@ -623,8 +623,9 @@ const SCHEMA_TREINO = {
           dicaRapida: { type: 'string', description: 'Lembrete de execução curtíssimo (máx. 5 palavras) para o personal falar EM VOZ ALTA no meio da série, ex.: "Cotovelos colados ao corpo"' },
           cadenciaSeg: { type: 'integer', description: 'Segundos por repetição no ritmo guiado por voz. Você é o especialista: movimentos compostos pesados ~3-4s, isolados ~2-3s, explosivos/potência ~1-2s. Para exercícios em "repeticoes" com segundos (ex.: prancha), repita esse valor igual à duração total do hold dividido pela contagem.' },
           grupoId: { type: 'string', description: 'EXCEÇÃO rara: preencha com o MESMO texto (ex.: "A") APENAS quando 2 exercícios (nunca mais que isso, salvo caso muito específico) devem virar um bi-set. Na imensa maioria dos exercícios, deixe "" (vazio) — um treino não deve ter todos os exercícios agrupados.' },
+          notaCoach: { type: 'string', description: 'Nota pontual do personal, falada em voz alta ao anunciar ESTE exercício — só preencha quando o histórico real do aluno (sono ruim recente, baixa aderência, RIR muito baixo persistente nesse exercício, objetivo específico) sugerir algo concreto e específico para dizer aqui. NÃO repita instrução técnica (isso já é "instrucoes"/"dicaRapida") nem genérico motivacional. Deixe "" (vazio) na grande maioria dos exercícios — só preencha quando houver algo real e específico a dizer.' },
         },
-        required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg', 'grupoId'],
+        required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg', 'grupoId', 'notaCoach'],
         additionalProperties: false,
       },
     },
@@ -683,7 +684,8 @@ Diretrizes:
 - Se for "academia", use máquinas e pesos livres comuns no Brasil.
 - Progrida a carga com base no histórico (2-5% quando o aluno completou tudo). Quando sugerir um valor numérico de carga em "cargaSugerida", pense em incrementos realistas de anilha — o padrão de academia é múltiplos de 2,5 kg (ex.: 20kg, 22,5kg, 25kg), não valores quebrados como 20,6kg.
 - Descanso coerente com o objetivo (hipertrofia 60-90s, força 120-180s, emagrecimento/resistência 30-60s).
-- Em "dicas", inclua orientação de intensidade (RPE ou "deixe 2 repetições na reserva") e quando este treino deve evoluir.`;
+- Em "dicas", inclua orientação de intensidade (RPE ou "deixe 2 repetições na reserva") e quando este treino deve evoluir.
+- "notaCoach" é RARO: só preencha quando sono/atividade recentes, a avaliação do plano anterior ou o histórico apontarem algo real e específico sobre ESTE exercício (ex.: sono ruim essa semana pede menos exigência hoje, RPE alto recente pede cautela, uma progressão clara de carga merece um incentivo pontual). Na maioria dos exercícios deixe "" — repetir nota em todo exercício vira ruído, não personalização.`;
     const response = await chamarIA(user, { schema: SCHEMA_TREINO });
     res.json(JSON.parse(textoDaResposta(response)));
   } catch (err) {
@@ -704,8 +706,9 @@ const SCHEMA_SUBSTITUTO = {
     instrucoes: { type: 'string', description: 'Execução correta: posição inicial, movimento, respiração, erro comum a evitar' },
     dicaRapida: { type: 'string' },
     cadenciaSeg: { type: 'integer' },
+    notaCoach: { type: 'string', description: 'Quase sempre deixe "" (vazio) — nesta substituição de emergência você não tem o histórico completo do aluno, só o perfil básico. Só preencha se o próprio perfil já indicar algo direto e relevante (ex.: uma restrição de saúde específica a respeitar neste exercício).' },
   },
-  required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg'],
+  required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg', 'notaCoach'],
   additionalProperties: false,
 };
 
@@ -743,8 +746,9 @@ const SCHEMA_EXERCICIO_PLANO = {
     dicaRapida: { type: 'string', description: 'Lembrete curtíssimo (máx. 5 palavras) para falar durante a série' },
     cadenciaSeg: { type: 'integer', description: 'Segundos por repetição no ritmo guiado (composto pesado ~3-4s, isolado ~2-3s, explosivo ~1-2s)' },
     grupoId: { type: 'string', description: 'EXCEÇÃO rara: preencha igual em 2 exercícios para formar um bi-set pontual. Na imensa maioria, deixe "" — não agrupe o treino inteiro.' },
+    notaCoach: { type: 'string', description: 'Nota pontual do personal, falada em voz alta ao anunciar ESTE exercício — só preencha quando o histórico real do aluno (sono ruim recente, baixa aderência, RIR muito baixo persistente nesse exercício, objetivo específico) sugerir algo concreto e específico para dizer aqui. NÃO repita instrução técnica (isso já é "instrucoes"/"dicaRapida") nem genérico motivacional. Deixe "" (vazio) na grande maioria dos exercícios — só preencha quando houver algo real e específico a dizer.' },
   },
-  required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg', 'grupoId'],
+  required: ['nome', 'series', 'repeticoes', 'cargaSugerida', 'descansoSeg', 'instrucoes', 'dicaRapida', 'cadenciaSeg', 'grupoId', 'notaCoach'],
   additionalProperties: false,
 };
 
@@ -875,7 +879,9 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ## Plano de corrida ativo do aluno (INTEGRE — não sobrecarregue pernas na véspera de treino intenso de corrida)
 ${JSON.stringify(planoCorridaResumo ?? { info: 'não tem plano de corrida' }, null, 2)}
 
-Gere os dias de treino para ${periodo} completa(s), APENAS nos dias da semana que o aluno marcou para musculação (ver "Dias preferidos para musculação" no perfil). Se ele não marcou dias, use uma frequência de 3x/semana em dias alternados (Segunda/Quarta/Sexta). Cada exercício deve ter "instrucoes" ensinando a execução correta (postura, amplitude completa, respiração, velocidade) e "dicaRapida" para reforço durante a série.`;
+Gere os dias de treino para ${periodo} completa(s), APENAS nos dias da semana que o aluno marcou para musculação (ver "Dias preferidos para musculação" no perfil). Se ele não marcou dias, use uma frequência de 3x/semana em dias alternados (Segunda/Quarta/Sexta). Cada exercício deve ter "instrucoes" ensinando a execução correta (postura, amplitude completa, respiração, velocidade) e "dicaRapida" para reforço durante a série.
+
+"notaCoach" é RARO: só preencha quando sono/atividade recentes, a avaliação do ciclo anterior ou o histórico de cargas apontarem algo real e específico sobre ESTE exercício (ex.: sono ruim essa semana pede menos exigência hoje, RPE alto recente pede cautela, uma progressão clara de carga merece um incentivo pontual). Na maioria dos exercícios deixe "" — repetir nota em todo exercício vira ruído, não personalização.`;
     const maxTokens = semanas <= 1 ? 16000 : semanas === 2 ? 28000 : 48000;
     const response = await chamarIA(user, { schema: SCHEMA_PLANO_MENSAL, maxTokens });
     const p = JSON.parse(textoDaResposta(response));

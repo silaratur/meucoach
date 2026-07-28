@@ -6,11 +6,13 @@ import {
   definirVozHabilitada,
   falar,
   incentivoAleatorio,
-  incentivoCurto,
+  incentivoContextual,
   ouvirResposta,
   repeticoesEmFala,
   silenciar,
+  ultimaFalaContextual,
   vozDisponivel,
+  type EstadoSerie,
 } from '../speech';
 import { tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
 import { trocarExercicio } from '../api';
@@ -271,19 +273,23 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     const rec = cargaRecomendada(sessoes, ex.nome);
     const carga = rec.cargaKg ? ` Recomendo ${rec.cargaKg} quilos.` : '';
     const dica = rod === 1 && ex.dicaRapida ? ` Lembrete: ${ex.dicaRapida}.` : '';
+    // Nota do personal baseada no histórico completo (sono, adesão, RIR recente, objetivo) — a IA
+    // só preenche quando há algo real e específico a dizer sobre este exercício, por isso só fala
+    // uma vez, na 1ª rodada, e nunca substitui a dica técnica de execução (isso é ex.dicaRapida).
+    const nota = rod === 1 && ex.notaCoach ? ` ${ex.notaCoach}` : '';
     if (bloco.exercicios.length > 1) {
       if (eIdx === 0 && primeiraDoBloco) {
         const nomes = bloco.exercicios.map((e) => e.nome).join(', depois ');
         const tipo = bloco.exercicios.length === 3 ? 'tri-set' : 'bi-set';
         falar(
-          `Agora um ${tipo}: ${nomes}, sem descanso entre eles. ${rodadasDoBloco(bloco)} rodadas. Vamos começar por ${ex.nome}, ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica} Toque em "série guiada" quando estiver pronto.`,
+          `Agora um ${tipo}: ${nomes}, sem descanso entre eles. ${rodadasDoBloco(bloco)} rodadas. Vamos começar por ${ex.nome}, ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica}${nota} Toque em "série guiada" quando estiver pronto.`,
         );
       } else {
-        falar(`Agora: ${ex.nome}. ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica}`, { fila: true });
+        falar(`Agora: ${ex.nome}. ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica}${nota}`, { fila: true });
       }
     } else {
       falar(
-        `${ex.nome}. Série ${rod} de ${ex.series}, ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica} Quando estiver em posição, toque em "série guiada" que eu marco o ritmo com você.`,
+        `${ex.nome}. Série ${rod} de ${ex.series}, ${repeticoesEmFala(ex.repeticoes)}.${carga}${dica}${nota} Quando estiver em posição, toque em "série guiada" que eu marco o ritmo com você.`,
       );
     }
   }
@@ -317,6 +323,21 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
       return `A seguir: um ${tipo} começando por ${primeiro.nome}.`;
     }
     return `A seguir: ${primeiro.nome}. ${repeticoesEmFala(primeiro.repeticoes)}.`;
+  }
+
+  // Estado estimado da série que está prestes a começar, a partir do desempenho REAL já registrado
+  // hoje nesta sessão (RIR e reps da última série já feita deste mesmo exercício) — não é sensor
+  // nem detecção ao vivo durante a contagem, é uma leitura de dado real coletado minutos atrás, na
+  // mesma sessão, que informa se o aluno chegou perto da falha ou ainda tem fôlego sobrando.
+  function estimarEstadoSerie(ex: Exercicio): EstadoSerie {
+    const item = itens[exerciciosState.findIndex((e) => e.id === ex.id)];
+    const ultima = item?.seriesFeitas[item.seriesFeitas.length - 1];
+    if (!ultima) return 'normal'; // primeira série deste exercício na sessão — ainda sem dado de hoje
+    if (ultima.rir != null && ultima.rir <= 1) return 'fadiga';
+    const { alvo, emSegundos } = alvoDe(ex.repeticoes);
+    if (!emSegundos && ultima.reps != null && ultima.reps < alvo - 1) return 'fadiga';
+    if (ultima.rir != null && ultima.rir >= 4) return 'performance';
+    return 'normal';
   }
 
   // ---------- Início: aquecimento (se houver) ou direto pro primeiro bloco ----------
@@ -397,6 +418,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   function iniciarContagemReal() {
     if (!exAtual) return;
     const { alvo, emSegundos } = alvoDe(exAtual.repeticoes);
+    const estado = estimarEstadoSerie(exAtual);
     setGuiando(true);
     setRepAtual(0);
     const cadenciaMs = emSegundos ? 1000 : Math.max(1000, Math.round((exAtual.cadenciaSeg || 3) * 1000));
@@ -413,11 +435,13 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
         } else {
           falar(String(n), { rapida: true });
           // intencionalidade positiva e revisão técnica no meio da série, como um personal do lado
+          // — o incentivo já leva em conta como a série anterior deste exercício foi hoje (fadiga
+          // perto da falha vs. fôlego sobrando), não é sempre o mesmo pool genérico.
           if (n > 1 && n < alvo && n % 3 === 0) {
             const usaDica = dicaRapida && n % 6 === 0;
-            falar(usaDica ? dicaRapida! : incentivoCurto(), { fila: true, rapida: true });
+            falar(usaDica ? dicaRapida! : incentivoContextual(estado), { fila: true, rapida: true });
           }
-          if (n === alvo - 1 && alvo >= 4) falar('Mais uma, tudo que tem!', { fila: true, rapida: true });
+          if (n === alvo - 1 && alvo >= 4) falar(ultimaFalaContextual(estado), { fila: true, rapida: true });
         }
         if (n >= alvo) terminarSerieGuiada(alvo, emSegundos);
       }, cadenciaMs);

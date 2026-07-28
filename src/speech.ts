@@ -177,6 +177,29 @@ export function incentivoAleatorio(): string {
 // Incentivos curtinhos falados NO MEIO da contagem de repetições, sem atrasar o ritmo.
 const INCENTIVOS_CURTOS = ['Isso!', 'Boa!', 'Força!', 'Capricha!', 'Controla!', 'Respira!', 'Segue firme!', 'Tá lindo!'];
 
-export function incentivoCurto(): string {
-  return INCENTIVOS_CURTOS[Math.floor(Math.random() * INCENTIVOS_CURTOS.length)];
+// Estado estimado do aluno NESTA série, a partir de dados reais de hoje (RIR/reps da última série
+// do mesmo exercício nesta sessão) — ver estimarEstadoSerie() no WorkoutPlayer. Não é detecção ao
+// vivo (não há sensor durante a contagem), é uma leitura do desempenho já registrado hoje.
+export type EstadoSerie = 'fadiga' | 'normal' | 'performance';
+
+// Incentivos contextuais ditos no meio da contagem — versão "ciente do estado" do incentivoCurto,
+// pra soar como um personal que percebeu como a série anterior foi, não um locutor genérico.
+const INCENTIVOS_POR_ESTADO: Record<EstadoSerie, string[]> = {
+  fadiga: ['Com calma, no seu ritmo.', 'Só o que der, sem forçar.', 'Técnica antes de tudo agora.', 'Vai com segurança.'],
+  normal: INCENTIVOS_CURTOS,
+  performance: ['Isso, aproveita o embalo!', 'Tá sobrando, busca mais!', 'Ritmo ótimo, mantém!', 'Boa, tá voando!'],
+};
+
+export function incentivoContextual(estado: EstadoSerie): string {
+  const pool = INCENTIVOS_POR_ESTADO[estado];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Frase dita perto do fim da contagem (penúltima rep) — no estado normal é sempre "força total";
+// em fadiga, dá permissão explícita pra encerrar com segurança (o botão "Terminei" já existe pra
+// isso); em performance, convida a buscar além do alvo combinado.
+export function ultimaFalaContextual(estado: EstadoSerie): string {
+  if (estado === 'fadiga') return 'Mais uma, se der com segurança — sentiu que chegou no limite? Pode encerrar aqui, sem problema.';
+  if (estado === 'performance') return 'Mais uma, tudo que tem! Se sobrar fôlego depois dessa, pode seguir além do combinado.';
+  return 'Mais uma, tudo que tem!';
 }

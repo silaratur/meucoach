@@ -141,6 +141,7 @@ export interface Exercicio {
   grupoId?: string; // exercícios com o mesmo grupoId formam um bi-set (2) ou tri-set (3): feitos em sequência, sem descanso entre eles
   cadenciaSeg?: number; // segundos por repetição no ritmo guiado (varia por exercício: composto lento, isolado mais rápido...)
   dicaRapida?: string; // lembrete curtíssimo de execução, falado durante a série guiada (ex.: "Cotovelos fixos")
+  notaCoach?: string; // nota pontual da IA baseada no histórico do aluno (sono, adesão, RIR recente, objetivo) — só quando há algo real a dizer sobre ESTE exercício, falada uma vez ao anunciá-lo
 }
 
 export type LocalTreino = 'academia' | 'casa' | 'rua';
