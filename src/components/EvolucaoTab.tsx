@@ -8,7 +8,7 @@ import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '
 import { MediaGallery, MediaPicker } from './Midia';
 import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
 import Markdown from './Markdown';
-import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2, Flame, Camera as IconeFotoComparar } from 'lucide-react';
+import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2, Flame } from 'lucide-react';
 
 // Grade de constância (estilo "calendário de contribuições") — últimas N semanas, nível de
 // atividade por dia (0 = nada, 3 = 3+ treinos). Usa só dados.sessoes, já calculado; não
@@ -631,21 +631,6 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
           ))}
         </div>
         <p className="meta-texto">{grade.filter((d) => d.nivel > 0).length} dos últimos {grade.length} dias com pelo menos um treino</p>
-      </div>
-
-      <div className="cartao">
-        <h3><IconeFotoComparar size={16} /> Antes / depois</h3>
-        <div className="comparar-fotos">
-          <div className="comparar-slot">
-            <IconeFotoComparar size={20} />
-            <span>Foto inicial</span>
-          </div>
-          <div className="comparar-slot">
-            <IconeFotoComparar size={20} />
-            <span>Foto mais recente</span>
-          </div>
-        </div>
-        <p className="meta-texto">Registre fotos da balança (acima) em datas diferentes pra comparar sua evolução visualmente aqui.</p>
       </div>
 
       {ultimaComDetalhe && (

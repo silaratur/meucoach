@@ -892,14 +892,6 @@ button.destaque {
 .grade-constancia i.nivel-2 { background: color-mix(in srgb, var(--verde) 65%, var(--borda)); }
 .grade-constancia i.nivel-3 { background: var(--verde); }
 
-/* ---------- Antes / depois (placeholder até haver 2+ fotos, Evolução) ---------- */
-.comparar-fotos { display: flex; gap: 10px; margin: 6px 0; }
-.comparar-slot {
-  flex: 1; aspect-ratio: 3/4; border: 1.5px dashed var(--borda); border-radius: 12px;
-  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
-  color: var(--texto-suave); font-size: 0.72rem; text-align: center; padding: 10px;
-}
-
 /* ---------- Recordes pessoais em destaque (Treino) ---------- */
 .recordes-tira { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .recorde-chip {

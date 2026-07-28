@@ -1122,11 +1122,16 @@ const SCHEMA_REFEICAO_PLANO = {
   additionalProperties: false,
 };
 
+// Mesma lista de src/types.ts (DIAS_SEMANA) — repetida aqui porque o servidor não importa
+// código do cliente. O enum abaixo obriga a IA a usar exatamente esses 7 valores (com acento
+// certo), pra não gerar sábado/domingo com uma grafia que o app não reconhece.
+const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
 const SCHEMA_DIA_MODELO_ALIMENTAR = {
   type: 'object',
   properties: {
     semanaModelo: { type: 'string', enum: ['A', 'B'] },
-    diaSemana: { type: 'string', description: 'Ex.: "Segunda"' },
+    diaSemana: { type: 'string', enum: DIAS_SEMANA },
     refeicoes: { type: 'array', items: SCHEMA_REFEICAO_PLANO },
   },
   required: ['semanaModelo', 'diaSemana', 'refeicoes'],
@@ -1153,23 +1158,31 @@ const SCHEMA_RECEITA_PLANO = {
   additionalProperties: false,
 };
 
-const SCHEMA_PLANO_ALIMENTAR = {
-  type: 'object',
-  properties: {
-    nome: { type: 'string' },
-    avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
-    estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
-    diasModelo: {
-      type: 'array',
-      description: '7 itens (só semana-modelo A) quando o plano tem 1 semana; 14 itens (7 de A + 7 de B) quando tem 2-4 semanas',
-      items: SCHEMA_DIA_MODELO_ALIMENTAR,
+// diasModelo precisa ser função (não schema fixo) porque o tamanho exigido do array muda com
+// semanaModeloB — sem minItems/maxItems, a IA já deixou sábado/domingo de fora silenciosamente
+// (a descrição em texto sozinha não é uma garantia, é só uma dica).
+function construirSchemaPlanoAlimentar(semanaModeloB) {
+  const totalDias = semanaModeloB ? 14 : 7;
+  return {
+    type: 'object',
+    properties: {
+      nome: { type: 'string' },
+      avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
+      estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
+      diasModelo: {
+        type: 'array',
+        description: `Exatamente ${totalDias} itens: ${semanaModeloB ? '7 dias (Segunda a Domingo) da semana-modelo A seguidos dos 7 dias da semana-modelo B' : '7 dias (Segunda a Domingo) da semana-modelo A'} — TODOS os 7 dias da semana em cada modelo, incluindo Sábado e Domingo, nunca só dias úteis.`,
+        items: SCHEMA_DIA_MODELO_ALIMENTAR,
+        minItems: totalDias,
+        maxItems: totalDias,
+      },
+      receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
+      recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
     },
-    receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
-    recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
-  },
-  required: ['nome', 'avaliacaoInicial', 'estrategia', 'diasModelo', 'receitas', 'recomendacoesGerais'],
-  additionalProperties: false,
-};
+    required: ['nome', 'avaliacaoInicial', 'estrategia', 'diasModelo', 'receitas', 'recomendacoesGerais'],
+    additionalProperties: false,
+  };
+}
 
 function textoMetasPorDiaSemana(metas) {
   if (!Array.isArray(metas) || !metas.length) return 'Sem meta calórica calculável (perfil incompleto — peso/altura/idade/sexo faltando).';
@@ -1178,11 +1191,13 @@ function textoMetasPorDiaSemana(metas) {
 
 // Teste real mostrou que 20000 é insuficiente até pro caso mais simples (1 semana-modelo, 3
 // refeições) — a lista de compras (JSON gerado por último) saía truncada/vazia. Valores bem
-// mais altos que a estimativa inicial.
+// mais altos que a estimativa inicial. Subidos de novo (~40%) depois que diasModelo passou a
+// EXIGIR os 7 dias completos via minItems (antes a IA às vezes só gerava dias úteis e cabia em
+// menos tokens) — sem essa folga extra, o schema mais rígido arrisca truncar a resposta.
 function maxTokensPlanoAlimentar(semanaModeloB, quantidadeRefeicoes) {
   const templates = semanaModeloB ? 2 : 1;
-  if (templates === 1) return quantidadeRefeicoes <= 3 ? 40000 : 48000;
-  return quantidadeRefeicoes <= 3 ? 56000 : 64000;
+  if (templates === 1) return quantidadeRefeicoes <= 3 ? 56000 : 68000;
+  return quantidadeRefeicoes <= 3 ? 78000 : 90000;
 }
 
 function normalizarNomeItem(s) {
@@ -1273,7 +1288,7 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ${textoAtividadeRecente(atividadeRecente)}`;
 
     const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
-    const response = await chamarIA(user, { schema: SCHEMA_PLANO_ALIMENTAR, maxTokens });
+    const response = await chamarIA(user, { schema: construirSchemaPlanoAlimentar(semanaModeloB), maxTokens });
     const resp = JSON.parse(textoDaResposta(response));
 
     // Receitas primeiro, pra poder resolver receitaNome -> receitaId dos itens (casamento por
