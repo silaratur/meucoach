@@ -332,21 +332,6 @@ button:disabled { opacity: 0.6; }
 
 /* ---------- Diário ---------- */
 .grupo-refeicao { margin-bottom: 8px; }
-.registro {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--fundo);
-  border-radius: 10px;
-  margin: 4px 0;
-  font-size: 0.92rem;
-}
-.registro-texto {
-  margin: 6px 2px 0;
-  font-size: 0.92rem;
-}
 .vazio { color: var(--texto-suave); font-style: italic; }
 .erro { color: var(--vermelho); font-size: 0.9rem; margin-top: 8px; }
 
@@ -633,14 +618,26 @@ button.destaque {
   width: 100%;
   margin-top: 4px;
 }
-.registro-bloco { margin: 4px 0 10px; }
-.registro-bloco .media-galeria { margin: 6px 0 0 6px; }
+/* Cada registro (com ou sem estimativa ainda) vira uma caixa própria, no mesmo padrão visual
+   dos outros cartões do app — resolve a reclamação de tudo "grudado" quando há vários registros
+   no mesmo tipo de refeição. Ordem interna fixa: horário/descrição → mídia → macros → avaliação. */
+.registro-cartao {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.registro-cartao .media-galeria { margin: 8px 0 0; }
+.registro-cartao .tabela-nutricional { margin-top: 8px; }
+.registro-cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.registro-hora-desc { font-size: 0.92rem; }
+/* Botão de remover: discreto por padrão (mesmo espírito do link "Excluir minha conta" no
+   Perfil — ação irreversível não deveria competir em peso visual com o resto do cartão), mas
+   com posição fixa e exclusiva no cabeçalho — nunca mais sobreposto a foto/texto/tabela. */
+.registro-remover { flex-shrink: 0; }
 
 /* ---------- Tabela de análise nutricional (foto da refeição) ---------- */
-.tabela-nutricional-bloco { margin: 8px 0; position: relative; }
-/* Registro sem foto: o botão de remover não tem a célula de imagem pra ancorar, então fica
-   solto no canto do bloco inteiro (mesmo visual do botão ancorado na imagem). */
-.tabela-nutricional-remover-solo { top: -4px; right: -4px; }
 .tabela-nutricional {
   width: 100%;
   border-collapse: collapse;
@@ -670,30 +667,36 @@ button.destaque {
   border-radius: 8px;
   display: block;
 }
-.tabela-nutricional-remover {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  background: var(--vermelho);
-  color: #fff;
-  border: none;
+/* Avaliação do coach: sempre por último no cartão do registro, com a nota de alinhamento
+   (0-10) em destaque colorido por faixa — verde/âmbar/vermelho, mesmos tons já usados nos
+   estados de sucesso/atenção/erro do resto do app, não uma paleta nova. */
+.avaliacao-coach { margin: 8px 2px 0; color: var(--texto-suave); }
+.avaliacao-coach-topo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.avaliacao-coach-topo span:first-of-type { flex: 1; }
+.avaliacao-coach .markdown { font-size: 0.85rem; }
+.avaliacao-coach .markdown p { margin: 0 0 6px; }
+.avaliacao-coach .markdown p:last-child { margin-bottom: 0; }
+.nota-alinhamento {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 1px 7px;
   border-radius: 999px;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  line-height: 1;
   font-size: 0.75rem;
 }
-.tabela-nutricional-analise {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  margin: 6px 2px 0;
-  color: var(--texto-suave);
-}
-.tabela-nutricional-analise .markdown { font-size: 0.85rem; }
-.tabela-nutricional-analise .markdown p { margin: 0 0 6px; }
-.tabela-nutricional-analise .markdown p:last-child { margin-bottom: 0; }
+.nota-alinhamento.nota-boa { background: var(--tom-sucesso-bg); border: 1px solid var(--tom-sucesso-borda); color: var(--verde-escuro); }
+.nota-alinhamento.nota-media { background: var(--tom-atencao-bg); border: 1px solid var(--tom-atencao-borda); color: var(--tom-atencao-texto); }
+.nota-alinhamento.nota-baixa { background: var(--tom-erro-bg); border: 1px solid var(--tom-erro-borda); color: var(--vermelho); }
 
 /* ---------- Total do dia / meta calórica ---------- */
 .kcal-chip { color: var(--verde-escuro); font-style: normal; font-weight: 600; font-size: 0.82rem; }

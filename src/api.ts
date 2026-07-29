@@ -57,6 +57,7 @@ export interface EstimativaRegistro {
   gorduras_g: number;
   fibras_g: number;
   comentario: string;
+  notaAlinhamento: number;
 }
 
 export function estimarCalorias(perfil: Perfil, registros: { id: string; tipo: string; descricao: string }[]) {
@@ -85,6 +86,7 @@ export interface AnaliseFoto {
   gorduras_g: number;
   fibras_g: number;
   comentario: string;
+  notaAlinhamento: number;
   ehComida: boolean;
 }
 

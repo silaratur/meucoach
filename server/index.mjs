@@ -1376,8 +1376,13 @@ const SCHEMA_CALORIAS = {
             description:
               'Nota CURTA e escaneável (máx. 2-3 linhas no total, nunca um parágrafo grande) — o app já mostra os macros numa tabela ao lado, não repita os números aqui. Formato: 1 frase inicial dizendo se o registro está alinhado ao objetivo do aluno; opcionalmente, UM ÚNICO bullet "- **Atenção:** ..." só se houver algo genuinamente relevante. Markdown simples é suportado (**negrito**, bullets com "- "). NUNCA inclua lista numerada de ações — isso é papel da avaliação diária do Coach.',
           },
+          notaAlinhamento: {
+            type: 'integer',
+            description:
+              'Nota de 0 a 10 de quão alinhado este registro está com o objetivo do aluno (emagrecimento, hipertrofia, saúde geral etc.) — considere macros, densidade calórica e qualidade dos alimentos. Seja honesto e varie de verdade conforme o caso real (não sempre 10 nem sempre a mesma nota) — isso é o que dá valor à nota.',
+          },
         },
-        required: ['id', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario'],
+        required: ['id', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario', 'notaAlinhamento'],
         additionalProperties: false,
       },
     },
@@ -1394,7 +1399,7 @@ app.post('/api/ai/calorias', autenticar, async (req, res) => {
       res.json({ estimativas: [] });
       return;
     }
-    const user = `Estime calorias e macros de cada registro alimentar abaixo (porções brasileiras típicas quando a quantidade não for informada). Devolva uma estimativa para CADA id recebido, incluindo um comentário curto de análise (mesmo padrão de uma leitura de foto de refeição, só que a partir do texto).
+    const user = `Estime calorias e macros de cada registro alimentar abaixo (porções brasileiras típicas quando a quantidade não for informada). Devolva uma estimativa para CADA id recebido, incluindo um comentário curto de análise e uma nota de 0-10 de alinhamento com o objetivo (mesmo padrão de uma leitura de foto de refeição, só que a partir do texto).
 
 ## Perfil
 ${perfilTexto(perfil)}
@@ -1471,9 +1476,14 @@ const SCHEMA_FOTO = {
       description:
         'Nota CURTA e escaneável (máx. 2-3 linhas no total, nunca um parágrafo grande) — o app já mostra os macros numa tabela ao lado, não repita os números aqui. Formato: 1 frase inicial dizendo se a refeição está alinhada ao objetivo do aluno; opcionalmente, UM ÚNICO bullet "- **Atenção:** ..." só se houver algo genuinamente relevante (não force um ponto de atenção numa refeição equilibrada). Markdown simples é suportado (**negrito**, bullets com "- "). NUNCA inclua lista numerada de ações pro dia seguinte — isso é papel da avaliação diária do Coach, não de uma nota rápida pós-refeição.',
     },
+    notaAlinhamento: {
+      type: 'integer',
+      description:
+        'Nota de 0 a 10 de quão alinhada esta refeição está com o objetivo do aluno (emagrecimento, hipertrofia, saúde geral etc.) — considere macros, densidade calórica e qualidade dos alimentos. Seja honesto e varie de verdade conforme o caso real (não sempre 10 nem sempre a mesma nota) — isso é o que dá valor à nota. Use 0 quando ehComida=false.',
+    },
     ehComida: { type: 'boolean', description: 'false se a imagem não parece ser de comida' },
   },
-  required: ['descricao', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario', 'ehComida'],
+  required: ['descricao', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario', 'notaAlinhamento', 'ehComida'],
   additionalProperties: false,
 };
 
@@ -1500,6 +1510,7 @@ Analise com atenção aos detalhes:
 2. A partir dos alimentos identificados, calcule a composição nutricional REAL da porção visível: calorias totais, proteína (g), carboidrato (g), gordura (g) e fibras (g). Baseie-se em valores nutricionais reais de cada alimento — some item por item, não invente um total genérico.
 3. Se algum alimento não estiver claramente identificável, diga isso em 1 frase curta dentro do comentário em vez de estimar às cegas — não é preciso um bullet separado pra isso.
 4. O comentário é uma nota RÁPIDA pós-refeição, não um relatório — siga exatamente o formato curto pedido no schema (1 frase + no máximo 1 bullet de atenção).
+5. Dê também "notaAlinhamento" (0-10, honesta e variável conforme o caso real) de quão alinhada essa refeição está com o objetivo do aluno.
 
 Se a imagem não for de comida, diga isso em "descricao" e marque ehComida=false.
 ${

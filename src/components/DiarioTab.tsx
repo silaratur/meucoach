@@ -6,7 +6,7 @@ import { analisarFoto, estimarCalorias, sugerirRefeicoes } from '../api';
 import { ditadoDisponivel, iniciarDitado } from '../speech';
 import { dataLocalDe, diaSemanaHoje, metaDiaria, recordesPessoais, semanaDoPlano, streakDias, totaisDoDia } from '../calc';
 import { OBJETIVOS } from '../types';
-import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha } from './Icones';
+import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha, IconeExcluir } from './Icones';
 import Markdown from './Markdown';
 import { CalendarDays, RefreshCw, Calculator, Flame, Beef, Wheat, Droplet } from 'lucide-react';
 
@@ -88,18 +88,16 @@ interface Props {
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
 }
 
-// Tabela de análise nutricional de uma refeição (com ou sem foto): [imagem, se houver] |
-// nutriente | valor, com a análise da IA logo abaixo. Aparece sempre que há estimativa
-// nutricional — a coluna de imagem só existe quando o registro tem uma foto analisada.
-function TabelaNutricional({
+// Tabela de macros de um registro (com ou sem foto): [imagem, se houver] | nutriente | valor.
+// Só os números — a análise do coach mora à parte, em AvaliacaoCoach, pra respeitar a ordem
+// pedida (horário/descrição → macros → avaliação) sem misturar responsabilidades num componente só.
+function TabelaMacros({
   fotoId,
   calorias,
   proteinas_g,
   carboidratos_g,
   gorduras_g,
   fibras_g,
-  analise,
-  aoRemover,
 }: {
   fotoId?: string;
   calorias?: number;
@@ -107,8 +105,6 @@ function TabelaNutricional({
   carboidratos_g?: number;
   gorduras_g?: number;
   fibras_g?: number;
-  analise?: string;
-  aoRemover?: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -132,38 +128,37 @@ function TabelaNutricional({
   ];
 
   return (
-    <div className="tabela-nutricional-bloco">
-      {aoRemover && !fotoId && (
-        <button className="mini tabela-nutricional-remover tabela-nutricional-remover-solo" onClick={aoRemover} title="Remover registro">
-          ✕
-        </button>
-      )}
-      <table className="tabela-nutricional">
-        <tbody>
-          {linhas.map((l, i) => (
-            <tr key={l.rotulo}>
-              {i === 0 && fotoId && (
-                <td className="tabela-nutricional-imagem" rowSpan={linhas.length}>
-                  {url && <img src={url} alt="Foto da refeição analisada" />}
-                  {aoRemover && (
-                    <button className="mini tabela-nutricional-remover" onClick={aoRemover} title="Remover registro">
-                      ✕
-                    </button>
-                  )}
-                </td>
-              )}
-              <td>{l.rotulo}</td>
-              <td>{l.valor}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {analise && (
-        <div className="tabela-nutricional-analise">
-          <IconeCoach size={14} />
-          <Markdown texto={analise} />
-        </div>
-      )}
+    <table className="tabela-nutricional">
+      <tbody>
+        {linhas.map((l, i) => (
+          <tr key={l.rotulo}>
+            {i === 0 && fotoId && (
+              <td className="tabela-nutricional-imagem" rowSpan={linhas.length}>
+                {url && <img src={url} alt="Foto da refeição analisada" />}
+              </td>
+            )}
+            <td>{l.rotulo}</td>
+            <td>{l.valor}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Avaliação do coach: comentário curto + nota de 0-10 de alinhamento com o objetivo do aluno —
+// sempre por último no cartão do registro (depois dos macros), como pedido.
+function AvaliacaoCoach({ nota, texto }: { nota?: number; texto?: string }) {
+  if (!texto && nota == null) return null;
+  const faixa = nota == null ? null : nota >= 8 ? 'boa' : nota >= 5 ? 'media' : 'baixa';
+  return (
+    <div className="avaliacao-coach">
+      <div className="avaliacao-coach-topo">
+        <IconeCoach size={14} />
+        <span>Avaliação do Coach</span>
+        {faixa && <span className={`nota-alinhamento nota-${faixa}`}>{nota}/10</span>}
+      </div>
+      {texto && <Markdown texto={texto} />}
     </div>
   );
 }
@@ -184,7 +179,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const [estimando, setEstimando] = useState(false);
   const [macrosPendentes, setMacrosPendentes] = useState<Pick<
     Registro,
-    'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g' | 'fibras_g'
+    'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g' | 'fibras_g' | 'notaAlinhamento'
   > | null>(null);
   const [analisePendente, setAnalisePendente] = useState('');
   // Snapshot da descrição no momento da última análise (foto ou reprocessamento) — comparado
@@ -272,6 +267,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
           carboidratos_g: a.carboidratos_g,
           gorduras_g: a.gorduras_g,
           fibras_g: a.fibras_g,
+          notaAlinhamento: a.notaAlinhamento,
         });
         setAnalisePendente(a.comentario);
       }
@@ -312,7 +308,16 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
         const registros = (d.dias[data]?.registros ?? []).map((r) => {
           const e = estimativas.find((x) => x.id === r.id);
           return e
-            ? { ...r, calorias: e.calorias, proteinas_g: e.proteinas_g, carboidratos_g: e.carboidratos_g, gorduras_g: e.gorduras_g, fibras_g: e.fibras_g, analiseIA: e.comentario }
+            ? {
+                ...r,
+                calorias: e.calorias,
+                proteinas_g: e.proteinas_g,
+                carboidratos_g: e.carboidratos_g,
+                gorduras_g: e.gorduras_g,
+                fibras_g: e.fibras_g,
+                analiseIA: e.comentario,
+                notaAlinhamento: e.notaAlinhamento,
+              }
             : r;
         });
         return { ...d, dias: { ...d.dias, [data]: { data, registros } } };
@@ -452,15 +457,17 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
               </button>
             )}
             {!analisando && macrosPendentes && (
-              <TabelaNutricional
-                fotoId={midiasPendentes.find((m) => m.tipo === 'foto')?.id}
-                calorias={macrosPendentes.calorias}
-                proteinas_g={macrosPendentes.proteinas_g}
-                carboidratos_g={macrosPendentes.carboidratos_g}
-                gorduras_g={macrosPendentes.gorduras_g}
-                fibras_g={macrosPendentes.fibras_g}
-                analise={analisePendente}
-              />
+              <>
+                <TabelaMacros
+                  fotoId={midiasPendentes.find((m) => m.tipo === 'foto')?.id}
+                  calorias={macrosPendentes.calorias}
+                  proteinas_g={macrosPendentes.proteinas_g}
+                  carboidratos_g={macrosPendentes.carboidratos_g}
+                  gorduras_g={macrosPendentes.gorduras_g}
+                  fibras_g={macrosPendentes.fibras_g}
+                />
+                <AvaliacaoCoach nota={macrosPendentes.notaAlinhamento} texto={analisePendente} />
+              </>
             )}
             {!analisando && textoDivergente && (
               <div className="aviso-texto-corrigido">
@@ -552,42 +559,29 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
             <div key={t.value} className="grupo-refeicao">
               <h3><Icone size={16} /> {t.label}</h3>
               {doTipo.map((r) => {
-                const temTabela = typeof r.calorias === 'number';
-                const textoRegistro = (
-                  <span>
-                    {r.hora} — {r.descricao}
-                    {typeof r.calorias === 'number' && (
-                      <em className="kcal-chip"> ~{Math.round(r.calorias)} kcal</em>
-                    )}
-                  </span>
-                );
+                const fotoId = r.midias?.find((m) => m.tipo === 'foto')?.id;
+                const fotoNaTabela = typeof r.calorias === 'number' && !!fotoId;
                 return (
-                  <div key={r.id} className="registro-bloco">
-                    {temTabela ? (
-                      <>
-                        {/* Tabela primeiro (com a foto e o botão de remover ancorados nela, quando há foto), texto/análise depois — sem duplicar imagem nem sobrepor botão no texto */}
-                        <MediaGallery midias={r.midias?.filter((m) => m.tipo !== 'foto')} />
-                        <TabelaNutricional
-                          fotoId={r.midias?.find((m) => m.tipo === 'foto')?.id}
-                          calorias={r.calorias}
-                          proteinas_g={r.proteinas_g}
-                          carboidratos_g={r.carboidratos_g}
-                          gorduras_g={r.gorduras_g}
-                          fibras_g={r.fibras_g}
-                          analise={r.analiseIA}
-                          aoRemover={() => remover(r.id)}
-                        />
-                        <p className="registro-texto">{textoRegistro}</p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="registro">
-                          {textoRegistro}
-                          <button className="mini" onClick={() => remover(r.id)}>✕</button>
-                        </div>
-                        <MediaGallery midias={r.midias} />
-                      </>
-                    )}
+                  <div key={r.id} className="registro-cartao">
+                    <div className="registro-cabecalho">
+                      <span className="registro-hora-desc">
+                        {r.hora} — {r.descricao}
+                        {typeof r.calorias === 'number' && <em className="kcal-chip"> ~{Math.round(r.calorias)} kcal</em>}
+                      </span>
+                      <button className="mini perigo registro-remover" onClick={() => remover(r.id)} title="Remover registro">
+                        <IconeExcluir size={14} />
+                      </button>
+                    </div>
+                    <MediaGallery midias={fotoNaTabela ? r.midias?.filter((m) => m.tipo !== 'foto') : r.midias} />
+                    <TabelaMacros
+                      fotoId={fotoId}
+                      calorias={r.calorias}
+                      proteinas_g={r.proteinas_g}
+                      carboidratos_g={r.carboidratos_g}
+                      gorduras_g={r.gorduras_g}
+                      fibras_g={r.fibras_g}
+                    />
+                    <AvaliacaoCoach nota={r.notaAlinhamento} texto={r.analiseIA} />
                   </div>
                 );
               })}

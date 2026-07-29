@@ -120,8 +120,11 @@ export interface Registro {
   carboidratos_g?: number;
   gorduras_g?: number;
   fibras_g?: number;
-  // comentário da análise nutricional da IA sobre a foto — só existe quando a origem foi uma foto analisada
+  // comentário da análise nutricional da IA (foto ou texto) — só existe quando já foi analisado
   analiseIA?: string;
+  // nota de 0 a 10 de quão alinhado este registro está com o objetivo do aluno — mesma origem
+  // (foto ou estimativa por texto) que preenche analiseIA, sempre junto com ela
+  notaAlinhamento?: number;
 }
 
 export interface DiaAlimentar {
