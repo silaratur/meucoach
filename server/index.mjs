@@ -1123,17 +1123,20 @@ const SCHEMA_REFEICAO_PLANO = {
 };
 
 // Mesma lista de src/types.ts (DIAS_SEMANA) — repetida aqui porque o servidor não importa
-// código do cliente.
+// código do cliente. O enum abaixo obriga a IA a usar exatamente esses 7 valores (com acento
+// certo), pra não gerar sábado/domingo com uma grafia que o app não reconhece.
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
-// Cada dia é um CAMPO NOMEADO do objeto (não um item de array) — cada semana-modelo exige os 7
-// campos via "required" do objeto, garantindo os 7 dias sem depender de minItems em array (ver
-// comentário em construirSchemaPlanoAlimentar sobre por que minItems não é opção aqui).
-function construirSchemaSemanaModelo() {
-  const properties = {};
-  for (const dia of DIAS_SEMANA) properties[dia] = { type: 'array', items: SCHEMA_REFEICAO_PLANO };
-  return { type: 'object', properties, required: [...DIAS_SEMANA], additionalProperties: false };
-}
+const SCHEMA_DIA_MODELO_ALIMENTAR = {
+  type: 'object',
+  properties: {
+    semanaModelo: { type: 'string', enum: ['A', 'B'] },
+    diaSemana: { type: 'string', enum: DIAS_SEMANA },
+    refeicoes: { type: 'array', items: SCHEMA_REFEICAO_PLANO },
+  },
+  required: ['semanaModelo', 'diaSemana', 'refeicoes'],
+  additionalProperties: false,
+};
 
 const SCHEMA_RECEITA_PLANO = {
   type: 'object',
@@ -1155,39 +1158,49 @@ const SCHEMA_RECEITA_PLANO = {
   additionalProperties: false,
 };
 
-// Teste real em produção confirmou que a API da Anthropic REJEITA minItems/maxItems com
-// qualquer valor diferente de 0 ou 1 em schemas de array ("'minItems' values other than 0 or 1
-// are not supported") — a abordagem anterior (diasModelo como array de 7/14 itens com
-// minItems/maxItems fixados) nunca chegava a gerar nada, sempre falhava antes da IA processar.
-// Cada semana-modelo agora é um OBJETO com um campo por dia (construirSchemaSemanaModelo) —
-// "required" em objeto não tem essa restrição, então os 7 dias continuam garantidos.
-function construirSchemaPlanoAlimentar(semanaModeloB) {
-  const properties = {
-    nome: { type: 'string' },
-    avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
-    estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
-    semanaModeloA: {
-      ...construirSchemaSemanaModelo(),
-      description: 'Semana-modelo A: um campo por dia (Segunda a Domingo), cada um com a lista de refeições daquele dia.',
-    },
-    receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
-    recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
-  };
-  const required = ['nome', 'avaliacaoInicial', 'estrategia', 'semanaModeloA', 'receitas', 'recomendacoesGerais'];
-  if (semanaModeloB) {
-    properties.semanaModeloB = {
-      ...construirSchemaSemanaModelo(),
-      description: 'Semana-modelo B: mesma estrutura da A, mas com cardápio visivelmente diferente pra dar variedade ao longo do plano.',
-    };
-    required.splice(4, 0, 'semanaModeloB');
-  }
+// Duas tentativas anteriores de garantir os 7 dias via schema já falharam em produção:
+// 1) diasModelo como array com minItems/maxItems fixados em 7/14 — a API da Anthropic rejeita
+//    minItems diferente de 0 ou 1 em arrays ("'minItems' values other than 0 or 1 are not
+//    supported"), então isso nunca chegava a gerar nada.
+// 2) cada semana-modelo como objeto com um campo obrigatório por dia (contornando o problema
+//    acima) — só trocou de erro: "The compiled grammar is too large". Forçar uma contagem exata
+//    de um schema aninhado não-trivial faz o compilador de gramática duplicar esse schema uma
+//    vez por instância exigida; aqui isso duplicava SCHEMA_REFEICAO_PLANO (que já contém um
+//    array de itens com 8 campos) 7 ou 14 vezes, estourando o limite de tamanho.
+// A saída: parar de tentar forçar a contagem exata NO SCHEMA. diasModelo volta a ser um array
+// simples (o schema do item é compilado UMA vez, repetido pela própria semântica de array) — a
+// garantia dos 7 dias completos passa a vir DEPOIS da resposta, em completarDiasFaltantes()
+// (processarPlanoAlimentar): se a IA pular algum dia, um segundo pedido pequeno — só os dias que
+// faltaram, schema minúsculo — completa o restante sem re-arriscar nenhum dos dois erros acima.
+function construirSchemaPlanoAlimentar() {
   return {
     type: 'object',
-    properties,
-    required,
+    properties: {
+      nome: { type: 'string' },
+      avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
+      estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
+      diasModelo: {
+        type: 'array',
+        description: 'Um item por dia — 7 dias (Segunda a Domingo) da semana-modelo "A", seguidos dos 7 dias da semana-modelo "B" quando houver. NUNCA pule Sábado ou Domingo, e nunca repita o mesmo dia duas vezes dentro da mesma semana-modelo.',
+        items: SCHEMA_DIA_MODELO_ALIMENTAR,
+      },
+      receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
+      recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
+    },
+    required: ['nome', 'avaliacaoInicial', 'estrategia', 'diasModelo', 'receitas', 'recomendacoesGerais'],
     additionalProperties: false,
   };
 }
+
+// Schema do pedido de complemento — só os dias que faltaram na 1ª resposta, nunca o plano
+// inteiro de novo. Fica pequeno de propósito (normalmente 1-2 dias), então não corre o risco de
+// nenhum dos dois erros documentados acima.
+const SCHEMA_COMPLEMENTO_DIAS = {
+  type: 'object',
+  properties: { dias: { type: 'array', items: SCHEMA_DIA_MODELO_ALIMENTAR } },
+  required: ['dias'],
+  additionalProperties: false,
+};
 
 // Distribuição padrão de calorias por tipo de refeição (prática nutricional comum) — dá à IA um
 // alvo concreto por refeição em vez de deixá-la estimar a divisão sozinha. Sem isso, refeições
@@ -1243,8 +1256,7 @@ function textoMetasPorDiaSemana(metas, tiposRefeicao) {
 
 // Teste real mostrou que 20000 é insuficiente até pro caso mais simples (1 semana-modelo, 3
 // refeições) — a lista de compras (JSON gerado por último) saía truncada/vazia. Valores bem
-// mais altos que a estimativa inicial, e com folga extra porque o schema EXIGE os 7 dias
-// completos de cada semana-modelo (campos obrigatórios, sem opção de "economizar" pulando dias).
+// mais altos que a estimativa inicial, com folga extra pro cardápio completo de 7 (ou 14) dias.
 function maxTokensPlanoAlimentar(semanaModeloB, quantidadeRefeicoes) {
   const templates = semanaModeloB ? 2 : 1;
   if (templates === 1) return quantidadeRefeicoes <= 3 ? 56000 : 68000;
@@ -1292,11 +1304,25 @@ app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
   });
 });
 
-// A IA devolve cada semana-modelo como objeto {Segunda: [...], Terça: [...], ...} (ver
-// construirSchemaSemanaModelo) — achata de volta pro formato de array [{semanaModelo, diaSemana,
-// refeicoes}, ...] que o resto do código (e o tipo DiaModeloAlimentar do cliente) já espera.
-function achatarSemanaModelo(semanaObj, letra) {
-  return DIAS_SEMANA.map((dia) => ({ semanaModelo: letra, diaSemana: dia, refeicoes: semanaObj[dia] }));
+// Pede à IA SÓ os dias (semanaModelo+diaSemana) que faltaram na resposta principal — schema
+// pequeno (ver SCHEMA_COMPLEMENTO_DIAS), não repete o resto do plano. Reaproveita o mesmo
+// contexto de perfil/metas da chamada original pra manter o padrão de qualidade.
+async function completarDiasFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao, rotulosRefeicao }) {
+  const listaDias = faltando.map((f) => `- semanaModelo "${f.semanaModelo}", diaSemana "${f.diaSemana}"`).join('\n');
+  const user = `Você é o mesmo médico nutrólogo esportivo que já montou a maior parte deste plano alimentar (mesmo perfil, mesmas metas). Na resposta anterior, exatamente estes dias ficaram faltando — gere SOMENTE eles agora, um item por dia, com o mesmo padrão de qualidade e variedade do restante do cardápio:
+
+${listaDias}
+
+Gere refeições APENAS destes tipos: ${rotulosRefeicao.join(', ')}.
+
+${textoMetasPorDiaSemana(metasPorDiaSemana, tiposRefeicao)}
+
+## Perfil do aluno
+${perfilTexto(perfil)}
+Observações do aluno para este plano: ${observacoes || 'nenhuma'}`;
+  const response = await chamarIA(user, { schema: SCHEMA_COMPLEMENTO_DIAS, maxTokens: 16000 });
+  const resp = JSON.parse(textoDaResposta(response));
+  return Array.isArray(resp.dias) ? resp.dias : [];
 }
 
 async function processarPlanoAlimentar(jobId, perfilId, body) {
@@ -1318,7 +1344,7 @@ Montar um PLANO ALIMENTAR ESTRUTURADO de ${semanas === 1 ? '1 semana' : `${seman
 
 # ESTRUTURA DO CARDÁPIO
 
-Gere ${semanaModeloB ? 'DUAS semanas-modelo alternadas ("semanaModeloA" e "semanaModeloB")' : 'UMA única semana-modelo ("semanaModeloA")'} — cada uma com um cardápio completo pros 7 dias da semana (Segunda a Domingo). NÃO gere um dia único para cada um dos dias do período total; o aplicativo repete/alterna essas semanas-modelo automaticamente ao longo da duração real escolhida.
+Gere ${semanaModeloB ? 'DUAS semanas-modelo alternadas ("A" e "B")' : 'UMA única semana-modelo ("A")'} — 7 dias cada, dias da semana Segunda a Domingo, TODOS os 7 (incluindo Sábado e Domingo, nunca só dias úteis). NÃO gere um dia único para cada um dos dias do período total; o aplicativo repete/alterna essas semanas-modelo automaticamente ao longo da duração real escolhida.
 ${semanaModeloB ? `O template A se repete ${repeticoesA}x e o template B se repete ${repeticoesB}x ao longo das ${semanas} semanas civis do plano (semanas ímpares usam A, pares usam B). Use exatamente esses multiplicadores ao montar a lista de compras agregada.` : ''}
 
 Gere refeições APENAS destes tipos, exatamente estes e nenhum outro: ${rotulosRefeicao.join(', ') || 'nenhum tipo selecionado — não gere nenhuma refeição'}.
@@ -1348,12 +1374,25 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ${textoAtividadeRecente(atividadeRecente)}`;
 
     const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
-    const response = await chamarIA(user, { schema: construirSchemaPlanoAlimentar(semanaModeloB), maxTokens });
+    const response = await chamarIA(user, { schema: construirSchemaPlanoAlimentar(), maxTokens });
     const resp = JSON.parse(textoDaResposta(response));
-    const diasModeloResp = [
-      ...achatarSemanaModelo(resp.semanaModeloA, 'A'),
-      ...(semanaModeloB ? achatarSemanaModelo(resp.semanaModeloB, 'B') : []),
-    ];
+
+    // Confere se a IA gerou os 7 (ou 14) dias esperados — sem garantia via schema (ver
+    // comentário em construirSchemaPlanoAlimentar), então a garantia é aqui: o que faltar é
+    // pedido de volta numa chamada pequena e extra antes de seguir.
+    const esperados = DIAS_SEMANA.map((dia) => ({ semanaModelo: 'A', diaSemana: dia }));
+    if (semanaModeloB) esperados.push(...DIAS_SEMANA.map((dia) => ({ semanaModelo: 'B', diaSemana: dia })));
+    const presentes = new Set((resp.diasModelo ?? []).map((d) => `${d.semanaModelo}|${d.diaSemana}`));
+    const faltando = esperados.filter((e) => !presentes.has(`${e.semanaModelo}|${e.diaSemana}`));
+
+    let diasModeloResp = resp.diasModelo ?? [];
+    if (faltando.length) {
+      console.warn(
+        `Plano alimentar (job ${jobId}): IA pulou ${faltando.length} dia(s) na 1ª resposta (${faltando.map((f) => `${f.diaSemana}/${f.semanaModelo}`).join(', ')}) — pedindo complemento.`,
+      );
+      const complemento = await completarDiasFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao, rotulosRefeicao });
+      diasModeloResp = [...diasModeloResp, ...complemento];
+    }
 
     // Receitas primeiro, pra poder resolver receitaNome -> receitaId dos itens (casamento por
     // nome normalizado — a IA não é confiável pra manter ids consistentes num JSON grande).
