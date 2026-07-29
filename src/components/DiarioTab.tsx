@@ -4,7 +4,7 @@ import { TIPOS_REFEICAO } from '../types';
 import { hojeISO, horaAgora, uid } from '../storage';
 import { analisarFoto, estimarCalorias, sugerirRefeicoes } from '../api';
 import { ditadoDisponivel, iniciarDitado } from '../speech';
-import { dataLocalDe, diaSemanaHoje, metaDiaria, streakDias, totaisDoDia } from '../calc';
+import { dataLocalDe, diaSemanaHoje, metaDiaria, recordesPessoais, semanaDoPlano, streakDias, totaisDoDia } from '../calc';
 import { OBJETIVOS } from '../types';
 import { ICONE_REFEICAO, IconeCoach, IconeDica, IconeCafeManha } from './Icones';
 import Markdown from './Markdown';
@@ -14,8 +14,10 @@ function OBJETIVO_LABEL(v: string): string {
   return OBJETIVOS.find((o) => o.value === v)?.label.split(' (')[0] ?? v;
 }
 
-// Frase do dia: rotação estática por dia do ano (sem custo/latência de IA) — um lembrete curto
-// de constância, no mesmo tom da persona do Coach (elogia/encoraja antes de cobrar).
+// Banco de frases genéricas — só entra como ÚLTIMO recurso na reflexão do dia (ver
+// reflexaoDoDia), quando não há nenhum dado real do aluno ainda pra comentar (conta novíssima,
+// sem plano/sessão/streak). Antes era a fonte PRINCIPAL da "frase do dia", o que a deixava
+// artificial e desconectada do plano real do aluno — motivo de reclamação direta do usuário.
 const FRASES_DO_DIA = [
   'Consistência bate motivação — apareça hoje, mesmo sem vontade.',
   'Um dia de cada vez. O que importa é não parar.',
@@ -32,9 +34,52 @@ function diaDoAno(d: Date): number {
   const inicio = new Date(d.getFullYear(), 0, 0);
   return Math.floor((d.getTime() - inicio.getTime()) / 86400000);
 }
+
+// Reflexão do dia: comenta algo REAL do plano/histórico do aluno em vez de uma frase
+// motivacional genérica — o Coach já conhece o plano de treino, corrida, alimentar e a
+// evolução, então usa isso de verdade. Prioridade: treino/corrida prevista e ainda não feita
+// hoje (o mais acionável) > sequência em andamento > recorde recente > plano alimentar sem
+// nada registrado ainda hoje > banco de frases genéricas, só quando nada acima se aplica.
+function reflexaoDoDia(dados: DadosPerfil, nomeDiaHoje: string, streak: number, registrosHoje: number): string {
+  const hoje = new Date();
+
+  const planoMusc = dados.planosMusculacao[0];
+  if (planoMusc) {
+    const diaHoje = planoMusc.dias.find((d) => d.semana === semanaDoPlano(planoMusc.criadoEm, hoje) && d.dia === nomeDiaHoje);
+    if (diaHoje && !planoMusc.concluidos.includes(diaHoje.id)) {
+      return `Hoje tem ${diaHoje.objetivo} no seu plano — bora encarar?`;
+    }
+  }
+
+  const planoCorrida = dados.planosCorrida[0];
+  if (planoCorrida) {
+    const diaHoje = planoCorrida.dias.find((d) => d.semana === semanaDoPlano(planoCorrida.criadoEm, hoje) && d.dia === nomeDiaHoje);
+    if (diaHoje && diaHoje.tipo !== 'descanso' && !planoCorrida.concluidos.includes(diaHoje.id)) {
+      return `Hoje é dia de corrida: ${diaHoje.titulo} — te espero lá.`;
+    }
+  }
+
+  if (streak >= 3) {
+    return `Você está há ${streak} dias seguidos ativo — sequência real, não deixa cair hoje.`;
+  }
+
+  // recordesPessoais() já vem ordenado do mais recente pro mais antigo — comparação simples de
+  // string "yyyy-MM-dd" (r.data já vem só com a data, sem hora) contra um corte de 3 dias atrás.
+  const corte = dataLocalDe(new Date(hoje.getTime() - 3 * 86400000).toISOString());
+  const recordeRecente = recordesPessoais(dados.sessoes).find((r) => r.data >= corte);
+  if (recordeRecente) {
+    return `Seu último recorde foi ${recordeRecente.cargaKg}kg em ${recordeRecente.nome} — o corpo está respondendo, continue.`;
+  }
+
+  if (dados.planosAlimentares[0] && registrosHoje === 0) {
+    return 'Seu plano alimentar está pronto — bora começar o dia registrando o café da manhã?';
+  }
+
+  return FRASES_DO_DIA[diaDoAno(hoje) % FRASES_DO_DIA.length];
+}
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, obterMidia, urlMidia } from '../media';
-import { MediaGallery, MediaPicker } from './Midia';
+import { MediaGallery, MediaPicker, PopupAnalisando } from './Midia';
 import { IconeAdicionar, IconeConcluido, IconeMicrofone, IconeParar } from './Icones';
 
 interface Props {
@@ -282,7 +327,6 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const dataBonita = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   const horaAtual = new Date().getHours();
   const saudacao = horaAtual < 12 ? 'Bom dia' : horaAtual < 18 ? 'Boa tarde' : 'Boa noite';
-  const fraseDoDia = FRASES_DO_DIA[diaDoAno(new Date()) % FRASES_DO_DIA.length];
   const temFotoPendente = midiasPendentes.some((m) => m.tipo === 'foto');
   // true quando o usuário editou a descrição depois da análise da foto — os macros/análise
   // exibidos ainda são da leitura anterior até reprocessar.
@@ -297,6 +341,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
   const pctCarboidrato = meta && totais.carboidratos_g > 0 ? Math.min(100, Math.round((totais.carboidratos_g / meta.carboidratos_g) * 100)) : 0;
   const pctGordura = meta && totais.gorduras_g > 0 ? Math.min(100, Math.round((totais.gorduras_g / meta.gorduras_g) * 100)) : 0;
   const streak = streakDias(dados.sessoes);
+  const fraseDoDia = reflexaoDoDia(dados, nomeDiaHoje, streak, dia.registros.length);
 
   return (
     <div>
@@ -400,7 +445,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                 });
               }}
             />
-            {analisando && <p className="leitura-balanca"><IconeCoach size={14} /> Olhando seu prato... a descrição chega em instantes.</p>}
+            {analisando && <PopupAnalisando texto="Olhando seu prato... a descrição chega em instantes." />}
             {temFotoPendente && !analisando && !textoDivergente && (
               <button className="destaque" onClick={() => analisarFotoPendente()}>
                 <RefreshCw size={15} /> Analisar a foto de novo

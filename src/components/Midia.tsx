@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MediaRef, TipoMidia } from '../media';
 import { comprimirImagem, salvarMidia, urlMidia } from '../media';
-import { IconeCamera, IconeGaleria, IconeNotaAudio, IconeParar, IconeVideo } from './Icones';
+import { IconeCamera, IconeCoach, IconeGaleria, IconeNotaAudio, IconeParar, IconeVideo } from './Icones';
+
+// ---------- Popup de foco: IA analisando uma foto/vídeo (comida, balança, sono, atividade) ----------
+// Mesma ideia do popup de descanso do WorkoutPlayer — dá um ponto de foco visual claro durante uma
+// espera curta e específica, sem travar o resto da tela. Compartilhado entre DiarioTab (foto de
+// comida) e EvolucaoTab (balança/sono/atividade) — evita duplicar o mesmo popup em cada tela.
+export function PopupAnalisando({ texto }: { texto: string }) {
+  return (
+    <div className="popup-analise">
+      <IconeCoach size={22} className="popup-analise-icone" />
+      <p>{texto}</p>
+    </div>
+  );
+}
 
 // ---------- Botões para anexar foto / vídeo / áudio ----------
 interface PickerProps {

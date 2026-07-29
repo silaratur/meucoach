@@ -115,6 +115,16 @@ function rotuloEtapa(etapa: EtapaCorrida, bloco: BlocoCorrida, repeticao: number
   return 'Corrida contínua';
 }
 
+// Faixa de ritmo alvo em texto curto, pro cartão da etapa — mesma fonte usada pra avaliar o
+// desempenho em avaliarRitmoBloco (velocidadeAlvoKmH quando houver, senão a faixa por percepção
+// de esforço).
+function faixaAlvoTexto(bloco: BlocoCorrida): string | null {
+  if (bloco.atividade !== 'correr') return null;
+  if (bloco.velocidadeAlvoKmH) return `~${bloco.velocidadeAlvoKmH.toFixed(1)} km/h`;
+  const [min, max] = FAIXA_RITMO_KMH[bloco.ritmo];
+  return `${min}–${max} km/h`;
+}
+
 export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, aoCancelar }: Props) {
   const guiado = !!diaPlano?.etapas?.length;
   const [estado, setEstado] = useState<'pronto' | 'correndo' | 'pausado' | 'fim'>('pronto');
@@ -422,9 +432,10 @@ export default function RunPlayer({ perfil, tituloTreino, diaPlano, aoTerminar, 
       {(estado === 'correndo' || estado === 'pausado') && (
         <div className="centro">
           {guiado && etapaAtual && blocoAtual && (
-            <div className="etapa-corrida-selo">
-              <strong>{rotuloEtapa(etapaAtual, blocoAtual, repeticao)}</strong>
-              <span>{formatarMMSS(restanteBloco)}</span>
+            <div className="cartao-etapa-corrida">
+              <p className="rotulo-descanso">{rotuloEtapa(etapaAtual, blocoAtual, repeticao)}</p>
+              <div className="timer">{formatarMMSS(restanteBloco)}</div>
+              {faixaAlvoTexto(blocoAtual) && <p className="meta-texto">Ritmo alvo: {faixaAlvoTexto(blocoAtual)}</p>}
             </div>
           )}
           <div className="corrida-metricas">

@@ -5,8 +5,8 @@ import { recordesPessoais, streakDias, dataLocalDe } from '../calc';
 import { analisarAtividadeFoto, analisarBalanca, avaliarSono } from '../api';
 import type { MediaRef } from '../media';
 import { blobParaBase64, excluirMidias, extrairFrameDeVideo, obterMidia } from '../media';
-import { MediaGallery, MediaPicker } from './Midia';
-import { IconeAdicionar, IconeSono, IconeCorrida, IconeCoach, IconeMusculacao, IconeCamera } from './Icones';
+import { MediaGallery, MediaPicker, PopupAnalisando } from './Midia';
+import { IconeAdicionar, IconeSono, IconeCorrida, IconeMusculacao, IconeCamera } from './Icones';
 import Markdown from './Markdown';
 import { Smartphone, Footprints, TrendingDown, Trophy, Dna, CalendarDays, Share2, Flame } from 'lucide-react';
 
@@ -588,7 +588,7 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
 
         <label><IconeCamera size={14} /> Tire uma foto do visor da balança (leio peso, gordura, massa magra, água, IMC...)</label>
         <MediaPicker tipos={['foto']} aoAdicionar={fotoBalanca} />
-        {analisando && <p className="vazio"><IconeCoach size={14} /> Lendo os números da balança...</p>}
+        {analisando && <PopupAnalisando texto="Lendo os números da balança..." />}
         {leitura && <div className="leitura-balanca"><Markdown texto={leitura} /></div>}
         {erro && <p className="erro">{erro}</p>}
 
@@ -675,13 +675,13 @@ export default function EvolucaoTab({ perfil, dados, atualizar, aoMudarPeso, aoM
         </p>
         <label><IconeSono size={15} /> Sono (foto ou vídeo do wearable)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoSonoRetroativa} />
-        {analisandoSono && <p className="vazio"><IconeCoach size={14} /> Analisando o sono...</p>}
+        {analisandoSono && <PopupAnalisando texto="Analisando o sono..." />}
         {resumoSono && <div className="leitura-balanca"><Markdown texto={resumoSono} /></div>}
         {erroSono && <p className="erro">{erroSono}</p>}
 
         <label><IconeCorrida size={15} /> Atividade (foto ou vídeo — passos, tempo ativo, calorias)</label>
         <MediaPicker tipos={['foto', 'video']} aoAdicionar={fotoAtividade} />
-        {analisandoAtividade && <p className="vazio"><IconeCoach size={14} /> Analisando a atividade...</p>}
+        {analisandoAtividade && <PopupAnalisando texto="Analisando a atividade..." />}
         {resumoAtividadeFoto && <div className="leitura-balanca"><Markdown texto={resumoAtividadeFoto} /></div>}
         {erroAtividade && <p className="erro">{erroAtividade}</p>}
 

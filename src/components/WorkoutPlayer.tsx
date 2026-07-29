@@ -802,7 +802,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
         )}
 
         {fase === 'aquecimento' && (
-          <div className="centro descanso">
+          <div className="popup-descanso">
             <p className="rotulo-descanso"><IconeAquecimento size={15} /> Aquecimento e mobilidade</p>
             {treino.aquecimento && <p className="instrucao">{treino.aquecimento}</p>}
             <div className="timer">{minutos}:{segundos}</div>

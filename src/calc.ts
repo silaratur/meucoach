@@ -24,6 +24,16 @@ export function reordenarSemana1<T extends { semana: number; dia: string }>(dias
   return [...comDistancia.map((x) => x.d), ...resto];
 }
 
+// Quantas semanas se passaram entre a criação de um plano (musculação/corrida) e a data alvo —
+// usado pra achar a "semana N" certa do plano ativo num dia qualquer (planos de 2-4 semanas
+// repetem os dias por semana). Compartilhado entre VisaoSemana e a frase do dia (DiarioTab).
+export function semanaDoPlano(criadoEmISO: string, alvo: Date): number {
+  const inicio = new Date(criadoEmISO);
+  inicio.setHours(0, 0, 0, 0);
+  const diffDias = Math.floor((alvo.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000));
+  return Math.floor(diffDias / 7) + 1;
+}
+
 // Data LOCAL (yyyy-MM-dd) de um instante ISO — NUNCA use isoString.slice(0,10) para saber
 // "que dia local é esse instante": toISOString() é UTC, e no Brasil (UTC-3) qualquer horário
 // entre ~21h e 23h59 local já virou o dia seguinte em UTC, quebrando comparações de "mesmo dia".

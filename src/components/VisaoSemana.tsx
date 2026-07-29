@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { DadosPerfil, Perfil, Treino } from '../types';
 import { DIAS_SEMANA } from '../types';
-import { dataLocalDe } from '../calc';
+import { dataLocalDe, semanaDoPlano } from '../calc';
 import { IconeComecar, IconeConcluido, IconeMusculacao, IconeCorrida, IconeSono } from './Icones';
 import { CalendarDays } from 'lucide-react';
 
@@ -17,15 +17,6 @@ function segundaDaSemana(): Date {
   seg.setDate(hoje.getDate() + deslocamento);
   seg.setHours(0, 0, 0, 0);
   return seg;
-}
-
-// Quantas semanas se passaram entre a criação do plano e a data alvo — usado pra achar
-// a "semana N" certa do plano ativo, já que a Visão da Semana só mostra a semana atual.
-function semanaDoPlano(criadoEmISO: string, alvo: Date): number {
-  const inicio = new Date(criadoEmISO);
-  inicio.setHours(0, 0, 0, 0);
-  const diffDias = Math.floor((alvo.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000));
-  return Math.floor(diffDias / 7) + 1;
 }
 
 interface Props {

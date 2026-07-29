@@ -1028,6 +1028,37 @@ button.destaque {
   text-align: center;
   z-index: 40;
 }
+/* Popup de foco pra uma espera curta e específica (IA analisando foto/vídeo) — mesma linguagem
+   visual do popup de descanso, mas com "bottom" mais alto porque aqui a barra de abas inferior
+   continua visível (o popup de descanso só existe dentro do WorkoutPlayer, que cobre a tela
+   toda). Ícone com pulso sutil pra indicar "processando", respeitando reduced-motion. */
+.popup-analise {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  width: min(92vw, 380px);
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  padding: 14px 18px;
+  text-align: center;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.popup-analise p { margin: 0; font-size: 0.9rem; color: var(--texto-suave); }
+.popup-analise-icone { color: var(--verde-escuro); animation: pulso-analise 1.4s ease-in-out infinite; }
+@keyframes pulso-analise {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popup-analise-icone { animation: none; }
+}
 .popup-fechar {
   position: absolute;
   top: 10px;
@@ -1099,19 +1130,20 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 /* ---------- Corrida ---------- */
 .modo-treino { margin-bottom: 12px; }
 .modo-treino .chip { font-size: 1rem; padding: 10px 18px; }
-.etapa-corrida-selo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  background: var(--tom-sucesso-bg);
-  border: 1px solid var(--tom-sucesso-borda);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin-top: 8px;
+/* Cartão de foco da etapa guiada — mesma linguagem visual do popup de descanso do WorkoutPlayer
+   (borda + sombra dura + destaque), mas em fluxo normal (não fixed) porque aqui as métricas de
+   corrida (distância/tempo/ritmo) continuam relevantes o tempo todo e não podem ficar cobertas. */
+.cartao-etapa-corrida {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 10px;
 }
-.etapa-corrida-selo strong { color: var(--verde-escuro); font-size: 0.95rem; }
-.etapa-corrida-selo span { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--verde-escuro); }
+.cartao-etapa-corrida .timer { font-size: 2.6rem; margin: 4px 0; }
+.cartao-etapa-corrida .meta-texto { margin-top: 2px; }
 .corrida-metricas {
   display: flex;
   flex-wrap: wrap;
