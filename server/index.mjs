@@ -1370,8 +1370,14 @@ const SCHEMA_CALORIAS = {
           proteinas_g: { type: 'number' },
           carboidratos_g: { type: 'number' },
           gorduras_g: { type: 'number' },
+          fibras_g: { type: 'number' },
+          comentario: {
+            type: 'string',
+            description:
+              'Nota CURTA e escaneável (máx. 2-3 linhas no total, nunca um parágrafo grande) — o app já mostra os macros numa tabela ao lado, não repita os números aqui. Formato: 1 frase inicial dizendo se o registro está alinhado ao objetivo do aluno; opcionalmente, UM ÚNICO bullet "- **Atenção:** ..." só se houver algo genuinamente relevante. Markdown simples é suportado (**negrito**, bullets com "- "). NUNCA inclua lista numerada de ações — isso é papel da avaliação diária do Coach.',
+          },
         },
-        required: ['id', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g'],
+        required: ['id', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario'],
         additionalProperties: false,
       },
     },
@@ -1388,7 +1394,7 @@ app.post('/api/ai/calorias', autenticar, async (req, res) => {
       res.json({ estimativas: [] });
       return;
     }
-    const user = `Estime calorias e macros de cada registro alimentar abaixo (porções brasileiras típicas quando a quantidade não for informada). Devolva uma estimativa para CADA id recebido.
+    const user = `Estime calorias e macros de cada registro alimentar abaixo (porções brasileiras típicas quando a quantidade não for informada). Devolva uma estimativa para CADA id recebido, incluindo um comentário curto de análise (mesmo padrão de uma leitura de foto de refeição, só que a partir do texto).
 
 ## Perfil
 ${perfilTexto(perfil)}
@@ -1460,7 +1466,11 @@ const SCHEMA_FOTO = {
     carboidratos_g: { type: 'number' },
     gorduras_g: { type: 'number' },
     fibras_g: { type: 'number' },
-    comentario: { type: 'string', description: 'Análise nutricional da refeição: pontos de atenção, o que está bom, relação com o objetivo da pessoa — e qualquer incerteza na estimativa' },
+    comentario: {
+      type: 'string',
+      description:
+        'Nota CURTA e escaneável (máx. 2-3 linhas no total, nunca um parágrafo grande) — o app já mostra os macros numa tabela ao lado, não repita os números aqui. Formato: 1 frase inicial dizendo se a refeição está alinhada ao objetivo do aluno; opcionalmente, UM ÚNICO bullet "- **Atenção:** ..." só se houver algo genuinamente relevante (não force um ponto de atenção numa refeição equilibrada). Markdown simples é suportado (**negrito**, bullets com "- "). NUNCA inclua lista numerada de ações pro dia seguinte — isso é papel da avaliação diária do Coach, não de uma nota rápida pós-refeição.',
+    },
     ehComida: { type: 'boolean', description: 'false se a imagem não parece ser de comida' },
   },
   required: ['descricao', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'fibras_g', 'comentario', 'ehComida'],
@@ -1488,8 +1498,8 @@ app.post('/api/ai/foto', autenticar, async (req, res) => {
 Analise com atenção aos detalhes:
 1. Identifique CADA alimento e bebida visível no prato, com a porção/quantidade aproximada mais realista possível (não arredonde para números "redondos" sem necessidade).
 2. A partir dos alimentos identificados, calcule a composição nutricional REAL da porção visível: calorias totais, proteína (g), carboidrato (g), gordura (g) e fibras (g). Baseie-se em valores nutricionais reais de cada alimento — some item por item, não invente um total genérico.
-3. Se algum alimento não estiver claramente identificável, diga isso explicitamente no comentário em vez de estimar às cegas.
-4. No comentário, dê uma análise nutricional objetiva da refeição (pontos fortes, pontos de atenção, relação com o objetivo do aluno).
+3. Se algum alimento não estiver claramente identificável, diga isso em 1 frase curta dentro do comentário em vez de estimar às cegas — não é preciso um bullet separado pra isso.
+4. O comentário é uma nota RÁPIDA pós-refeição, não um relatório — siga exatamente o formato curto pedido no schema (1 frase + no máximo 1 bullet de atenção).
 
 Se a imagem não for de comida, diga isso em "descricao" e marque ehComida=false.
 ${

@@ -637,7 +637,10 @@ button.destaque {
 .registro-bloco .media-galeria { margin: 6px 0 0 6px; }
 
 /* ---------- Tabela de análise nutricional (foto da refeição) ---------- */
-.tabela-nutricional-bloco { margin: 8px 0; }
+.tabela-nutricional-bloco { margin: 8px 0; position: relative; }
+/* Registro sem foto: o botão de remover não tem a célula de imagem pra ancorar, então fica
+   solto no canto do bloco inteiro (mesmo visual do botão ancorado na imagem). */
+.tabela-nutricional-remover-solo { top: -4px; right: -4px; }
 .tabela-nutricional {
   width: 100%;
   border-collapse: collapse;

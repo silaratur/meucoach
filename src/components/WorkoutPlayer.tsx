@@ -407,12 +407,13 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     anunciarEstacao(0, 0, 1, true);
   }
 
-  // ---------- Preparação: ~3s para o aluno tocar em "começar" e se posicionar no aparelho ----------
+  // ---------- Preparação: 4s para o aluno se posicionar no aparelho, com contagem por voz ----------
   function iniciarSerieGuiada() {
     if (!exAtual || guiando || preparando) return;
     setPreparando(true);
-    setContagemPrep(3);
+    setContagemPrep(4);
     falar('Prepare-se e se posicione no aparelho.', { rapida: true });
+    falar('4', { fila: true, rapida: true });
     contagemPrepRef.current = window.setInterval(() => {
       setContagemPrep((n) => {
         const prox = n - 1;
@@ -631,15 +632,52 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     }
   }
 
+  // Estima quantos segundos a síntese de voz leva pra falar um texto (rate normal, ~2,3
+  // palavras/segundo em pt-BR) — usado pra agendar dinamicamente as falas do descanso sem
+  // adivinhar um tamanho fixo. Pequena folga fixa pro respiro entre frases/pausas de pontuação.
+  function duracaoFalaSeg(texto?: string): number {
+    if (!texto) return 0;
+    const palavras = texto.trim().split(/\s+/).filter(Boolean).length;
+    return palavras / 2.3 + 0.6;
+  }
+
   // ---------- Descanso: preenchido com dica, análise e prévia do próximo — não é silêncio ----------
-  // Os últimos ~10s são uma "zona protegida": nenhuma dica/prévia é agendada tão perto do fim, e os
-  // avisos de tempo (dez segundos, contagem final) NUNCA usam fila — cancelam qualquer fala pendente
-  // pra sempre chegar na hora certa, sem serem atropelados ou atropelar o bip final.
+  // Os últimos ~12s são uma "zona protegida" (RESERVA_FINAL): nenhuma fala é agendada pra terminar
+  // depois disso, é o espaço só pro aviso final (dez segundos + contagem 3-2-1 + bip). O ponto de
+  // início de cada fala é calculado a partir da duração REAL estimada do texto (duracaoFalaSeg),
+  // não de um tamanho fixo — antes disso, uma "dica" mais longa (o combo performance+técnica de
+  // uma rodada nova) podia ainda estar falando quando batia a marca de dez segundos, que SEMPRE
+  // cancela qualquer fala pendente (rapida, sem fila) pra garantir o aviso na hora certa — daí a
+  // sensação de sobreposição/corte que o usuário relatou. Agora cada fala só é agendada se couber
+  // inteira antes da zona protegida (e antes da fala seguinte), preferindo os pontos "naturais" de
+  // sempre (~45%/~78% do tempo decorrido) e só antecipando quando o texto é longo demais pra caber
+  // nesse ponto — nunca sobrepõe, e se não couber de jeito nenhum, a fala é omitida (silêncio).
   function iniciarDescanso(segundos: number, conteudo: { dica?: string; proximo?: string }, aoFim: () => void) {
     setFase('descanso');
     setRestante(segundos);
-    const marcoDica = conteudo.dica && segundos >= 35 ? Math.max(15, Math.round(segundos * 0.55)) : -1;
-    const marcoProximo = conteudo.proximo && segundos >= 30 ? Math.max(11, Math.round(segundos * 0.22)) : -1;
+
+    const RESERVA_FINAL = 12;
+    const GAP = 1.5;
+    const limiteBase = segundos - RESERVA_FINAL;
+
+    const durProximo = duracaoFalaSeg(conteudo.proximo);
+    let inicioProximo: number | null = conteudo.proximo && durProximo > 0 ? Math.max(1, Math.round(segundos * 0.78)) : null;
+    if (inicioProximo != null) {
+      if (inicioProximo + durProximo > limiteBase) inicioProximo = limiteBase - durProximo;
+      if (inicioProximo < 1) inicioProximo = null;
+    }
+
+    const durDica = duracaoFalaSeg(conteudo.dica);
+    let inicioDica: number | null = conteudo.dica && durDica > 0 ? Math.max(1, Math.round(segundos * 0.45)) : null;
+    if (inicioDica != null) {
+      const limiteDica = inicioProximo != null ? inicioProximo - GAP : limiteBase;
+      if (inicioDica + durDica > limiteDica) inicioDica = limiteDica - durDica;
+      if (inicioDica < 1) inicioDica = null;
+    }
+
+    let marcoDica = inicioDica != null ? Math.round(segundos - inicioDica) : -1;
+    let marcoProximo = inicioProximo != null ? Math.round(segundos - inicioProximo) : -1;
+    if (marcoDica > 0 && marcoDica <= marcoProximo) marcoDica = -1; // segurança: nunca deixa colidir
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = window.setInterval(() => {
       setRestante((r) => {

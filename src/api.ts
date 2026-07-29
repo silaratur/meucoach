@@ -55,6 +55,8 @@ export interface EstimativaRegistro {
   proteinas_g: number;
   carboidratos_g: number;
   gorduras_g: number;
+  fibras_g: number;
+  comentario: string;
 }
 
 export function estimarCalorias(perfil: Perfil, registros: { id: string; tipo: string; descricao: string }[]) {

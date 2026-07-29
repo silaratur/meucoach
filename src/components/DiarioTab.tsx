@@ -43,8 +43,9 @@ interface Props {
   atualizar: (m: (d: DadosPerfil) => DadosPerfil) => void;
 }
 
-// Tabela de análise nutricional de uma refeição fotografada: imagem | nutriente | valor,
-// com a análise da IA logo abaixo. Só aparece quando há foto E estimativa nutricional.
+// Tabela de análise nutricional de uma refeição (com ou sem foto): [imagem, se houver] |
+// nutriente | valor, com a análise da IA logo abaixo. Aparece sempre que há estimativa
+// nutricional — a coluna de imagem só existe quando o registro tem uma foto analisada.
 function TabelaNutricional({
   fotoId,
   calorias,
@@ -87,11 +88,16 @@ function TabelaNutricional({
 
   return (
     <div className="tabela-nutricional-bloco">
+      {aoRemover && !fotoId && (
+        <button className="mini tabela-nutricional-remover tabela-nutricional-remover-solo" onClick={aoRemover} title="Remover registro">
+          ✕
+        </button>
+      )}
       <table className="tabela-nutricional">
         <tbody>
           {linhas.map((l, i) => (
             <tr key={l.rotulo}>
-              {i === 0 && (
+              {i === 0 && fotoId && (
                 <td className="tabela-nutricional-imagem" rowSpan={linhas.length}>
                   {url && <img src={url} alt="Foto da refeição analisada" />}
                   {aoRemover && (
@@ -260,7 +266,9 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
       atualizar((d) => {
         const registros = (d.dias[data]?.registros ?? []).map((r) => {
           const e = estimativas.find((x) => x.id === r.id);
-          return e ? { ...r, calorias: e.calorias, proteinas_g: e.proteinas_g, carboidratos_g: e.carboidratos_g, gorduras_g: e.gorduras_g } : r;
+          return e
+            ? { ...r, calorias: e.calorias, proteinas_g: e.proteinas_g, carboidratos_g: e.carboidratos_g, gorduras_g: e.gorduras_g, fibras_g: e.fibras_g, analiseIA: e.comentario }
+            : r;
         });
         return { ...d, dias: { ...d.dias, [data]: { data, registros } } };
       });
@@ -499,7 +507,7 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
             <div key={t.value} className="grupo-refeicao">
               <h3><Icone size={16} /> {t.label}</h3>
               {doTipo.map((r) => {
-                const temTabela = r.midias?.some((m) => m.tipo === 'foto') && typeof r.calorias === 'number';
+                const temTabela = typeof r.calorias === 'number';
                 const textoRegistro = (
                   <span>
                     {r.hora} — {r.descricao}
@@ -512,10 +520,10 @@ export default function DiarioTab({ perfil, dados, atualizar }: Props) {
                   <div key={r.id} className="registro-bloco">
                     {temTabela ? (
                       <>
-                        {/* Tabela primeiro (com a foto e o botão de remover ancorados nela), texto/análise depois — sem duplicar imagem nem sobrepor botão no texto */}
+                        {/* Tabela primeiro (com a foto e o botão de remover ancorados nela, quando há foto), texto/análise depois — sem duplicar imagem nem sobrepor botão no texto */}
                         <MediaGallery midias={r.midias?.filter((m) => m.tipo !== 'foto')} />
                         <TabelaNutricional
-                          fotoId={r.midias!.find((m) => m.tipo === 'foto')?.id}
+                          fotoId={r.midias?.find((m) => m.tipo === 'foto')?.id}
                           calorias={r.calorias}
                           proteinas_g={r.proteinas_g}
                           carboidratos_g={r.carboidratos_g}
