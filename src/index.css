@@ -1324,7 +1324,7 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .resumo-lista-compras .meta-texto { margin: 0; }
 
 /* Cada tipo de refeição do banco (café, almoço...) vira uma caixa própria — mesmo padrão visual
-   dos outros cartões, com o seletor das ~5 opções no topo e o preparo completo dentro de um
+   dos outros cartões (ordenadas por horário no componente), com o preparo completo dentro de um
    <details> pra não sobrecarregar a tela com passo a passo de tudo de uma vez. */
 .refeicao-banco-cartao {
   background: var(--superficie);
@@ -1334,8 +1334,14 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
   margin: 10px 0;
 }
 .refeicao-banco-cartao .detalhes-dia:first-child { margin-top: 0; }
-.opcoes-refeicao { margin: 6px 0; gap: 6px; }
-.opcoes-refeicao .chip.mini { padding: 4px 10px; font-size: 0.78rem; }
+.refeicao-banco-cabecalho { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.refeicao-banco-cabecalho .detalhes-dia { margin: 0; flex: 1; }
+/* A troca é uma exceção pontual (o revezamento automático já cobre a variedade da semana) —
+   por isso discreta, não um seletor chamativo competindo com o nome do prato. */
+.trocar-opcao { flex-shrink: 0; color: var(--texto-suave); }
+/* Pedido explícito de design: dar destaque real ao nome do prato — é a informação que a pessoa
+   mais precisa reconhecer rápido ao abrir o cardápio do dia. */
+.nome-prato { font-size: 1.05rem; font-weight: 700; margin: 4px 0 6px; }
 
 .grupo-categoria-compras { margin-top: 10px; }
 .rotulo-secao-compras {

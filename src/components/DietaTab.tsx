@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { DadosPerfil, ItemListaCompras, OpcaoRefeicao, Perfil, TipoRefeicao } from '../types';
+import type { DadosPerfil, ItemListaCompras, OpcaoRefeicao, Perfil, SlotRefeicaoAlimentar, TipoRefeicao } from '../types';
 import { DIAS_SEMANA, TIPOS_REFEICAO } from '../types';
 import { uid, hojeISO, horaAgora } from '../storage';
 import { diaSemanaHoje, metaDiaria } from '../calc';
 import { gerarPlanoAlimentar, type MetaPorDiaSemana } from '../api';
 import { acompanharJobIA } from '../jobs';
 import { IconeConcluido, IconeExcluir, IconeMusculacao, IconeSono, ICONE_REFEICAO } from './Icones';
-import { ChefHat, ShoppingBasket, CalendarDays, TrendingUp, Info, ClipboardList } from 'lucide-react';
+import { ChefHat, ShoppingBasket, CalendarDays, TrendingUp, Info, ClipboardList, RefreshCw, Pill } from 'lucide-react';
 import Markdown from './Markdown';
 
 interface Props {
@@ -49,8 +49,10 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
   const [modo, setModo] = useState<'cardapio' | 'compras' | 'preparo'>('cardapio');
   const [semanaModeloVista, setSemanaModeloVista] = useState<'A' | 'B'>('A');
   const [diaVisto, setDiaVisto] = useState(diaSemanaHoje());
-  // Qual das ~5 opções está selecionada por (semana-modelo, tipo de refeição) — o aluno escolhe
-  // livremente entre a principal e as alternativas; sem seleção, usa a principal (índice 0).
+  // As 5 combinações de cada refeição se revezam automaticamente ao longo dos dias da semana
+  // (dia 1 usa a combinação 1, dia 2 a combinação 2, ...) — isso é o que dá variedade real sem
+  // depender do aluno escolher toda vez. Esse mapa só guarda uma TROCA manual pontual, por dia
+  // específico (chave inclui o dia), pra quem quiser ver outra opção num dia sem mexer no resto.
   const [opcaoSelecionada, setOpcaoSelecionada] = useState<Record<string, number>>({});
 
   const plano = dados.planosAlimentares[0] ?? null;
@@ -132,30 +134,44 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
   const diaAtual = plano?.diasModelo.find((d) => d.semanaModelo === semanaModeloVista && d.diaSemana === diaVisto) ?? null;
   const bancoAtual = plano?.bancos.find((b) => b.semanaModelo === semanaModeloVista) ?? null;
 
-  function opcaoDoSlot(tipo: TipoRefeicao) {
-    const slot = bancoAtual?.slots.find((s) => s.tipo === tipo);
-    if (!slot || !slot.opcoes.length) return { slot: null, idx: 0, opcao: null };
-    const chave = `${semanaModeloVista}|${tipo}`;
-    const idx = Math.min(opcaoSelecionada[chave] ?? 0, slot.opcoes.length - 1);
-    return { slot, idx, opcao: slot.opcoes[idx] };
+  interface LinhaRefeicao {
+    tipo: TipoRefeicao;
+    slot: SlotRefeicaoAlimentar;
+    opcao: OpcaoRefeicao;
+    chave: string;
   }
 
-  const totalDia =
-    diaAtual && plano
-      ? plano.tiposRefeicaoIncluidos.reduce(
-          (acc, tipo) => {
-            const { opcao } = opcaoDoSlot(tipo);
-            if (!opcao) return acc;
-            return {
-              calorias: acc.calorias + opcao.calorias,
-              proteinas_g: acc.proteinas_g + opcao.proteinas_g,
-              carboidratos_g: acc.carboidratos_g + opcao.carboidratos_g,
-              gorduras_g: acc.gorduras_g + opcao.gorduras_g,
-            };
-          },
-          { calorias: 0, proteinas_g: 0, carboidratos_g: 0, gorduras_g: 0 },
-        )
-      : null;
+  // Rotação automática: o dia da semana decide qual das ~5 combinações aparece (dia 0 = combinação
+  // 0, dia 1 = combinação 1, ..., voltando pra 0 depois da última) — é isso que dá variedade real
+  // ao longo da semana sem exigir que o aluno escolha toda vez. Uma troca manual pontual (por dia
+  // específico) pode sobrescrever a rotação via "opcaoSelecionada".
+  function linhaDoDia(tipo: TipoRefeicao, diaSemana: string): LinhaRefeicao | null {
+    const slot = bancoAtual?.slots.find((s) => s.tipo === tipo);
+    if (!slot || !slot.opcoes.length) return null;
+    const chave = `${semanaModeloVista}|${diaSemana}|${tipo}`;
+    const padrao = DIAS_SEMANA.indexOf(diaSemana) % slot.opcoes.length;
+    const idx = Math.min(opcaoSelecionada[chave] ?? padrao, slot.opcoes.length - 1);
+    return { tipo, slot, opcao: slot.opcoes[idx], chave };
+  }
+
+  const linhasDoDia: LinhaRefeicao[] = diaAtual
+    ? (plano?.tiposRefeicaoIncluidos ?? [])
+        .map((tipo) => linhaDoDia(tipo, diaVisto))
+        .filter((l): l is LinhaRefeicao => l !== null)
+        .sort((a, b) => (a.slot.horarioSugerido || '').localeCompare(b.slot.horarioSugerido || ''))
+    : [];
+
+  const totalDia = diaAtual
+    ? linhasDoDia.reduce(
+        (acc, l) => ({
+          calorias: acc.calorias + l.opcao.calorias,
+          proteinas_g: acc.proteinas_g + l.opcao.proteinas_g,
+          carboidratos_g: acc.carboidratos_g + l.opcao.carboidratos_g,
+          gorduras_g: acc.gorduras_g + l.opcao.gorduras_g,
+        }),
+        { calorias: 0, proteinas_g: 0, carboidratos_g: 0, gorduras_g: 0 },
+      )
+    : null;
 
   return (
     <div>
@@ -283,12 +299,9 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
                     </div>
                   )}
 
-                  {plano.tiposRefeicaoIncluidos.map((tipo) => {
-                    const { slot, idx, opcao } = opcaoDoSlot(tipo);
-                    if (!slot || !opcao) return null;
+                  {linhasDoDia.map(({ tipo, slot, opcao, chave }) => {
                     const Icone = ICONE_REFEICAO[tipo];
                     const rotulo = TIPOS_REFEICAO.find((t) => t.value === tipo)?.label ?? tipo;
-                    const chave = `${semanaModeloVista}|${tipo}`;
                     const temPreparo = !!(
                       opcao.modoPreparo?.length ||
                       opcao.tempoPreparoMin ||
@@ -301,26 +314,27 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
                     );
                     return (
                       <div key={tipo} className="refeicao-banco-cartao">
-                        <p className="detalhes-dia">
-                          <Icone size={14} /> <strong>{rotulo}{slot.horarioSugerido ? ` · ${slot.horarioSugerido}` : ''}</strong>
-                        </p>
+                        <div className="refeicao-banco-cabecalho">
+                          <p className="detalhes-dia">
+                            <Icone size={14} /> <strong>{rotulo}{slot.horarioSugerido ? ` · ${slot.horarioSugerido}` : ''}</strong>
+                          </p>
+                          {slot.opcoes.length > 1 && (
+                            <button
+                              className="mini trocar-opcao"
+                              title="Ver outra combinação pra hoje"
+                              onClick={() => {
+                                const atual = slot.opcoes.indexOf(opcao);
+                                const proximo = (atual + 1) % slot.opcoes.length;
+                                setOpcaoSelecionada((s) => ({ ...s, [chave]: proximo }));
+                              }}
+                            >
+                              <RefreshCw size={12} /> Trocar
+                            </button>
+                          )}
+                        </div>
                         {slot.objetivoNutricional && <p className="meta-texto">{slot.objetivoNutricional}</p>}
 
-                        {slot.opcoes.length > 1 && (
-                          <div className="chips-tipo opcoes-refeicao">
-                            {slot.opcoes.map((_, i) => (
-                              <button
-                                key={i}
-                                className={`chip mini ${idx === i ? 'ativa' : ''}`}
-                                onClick={() => setOpcaoSelecionada((s) => ({ ...s, [chave]: i }))}
-                              >
-                                {i === 0 ? 'Principal' : `Opção ${i + 1}`}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        <p className="detalhes-dia"><strong>{opcao.nomeSugerido}</strong></p>
+                        <p className="nome-prato">{opcao.nomeSugerido}</p>
                         {opcao.observacao && <p className="sugestao-motivo"><Markdown texto={opcao.observacao} inline /></p>}
                         {opcao.itens.map((item) => (
                           <p key={item.id} className="item-refeicao-linha">
@@ -388,6 +402,13 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
             plano.planejamentoPreparoSemanal
               ? <Markdown texto={plano.planejamentoPreparoSemanal} />
               : <p className="meta-texto">Este plano não trouxe um planejamento de preparo semanal.</p>
+          )}
+
+          {plano.estrategiaSuplementacao && (
+            <details className="sugestao">
+              <summary><strong><Pill size={15} /> Suplementação</strong></summary>
+              <Markdown texto={plano.estrategiaSuplementacao} />
+            </details>
           )}
 
           {plano.recomendacoesGerais && (

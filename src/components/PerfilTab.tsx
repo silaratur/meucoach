@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Perfil } from '../types';
-import { OBJETIVOS, SUPLEMENTOS_COMUNS } from '../types';
+import { EQUIPAMENTOS_COZINHA_COMUNS, OBJETIVOS, ORCAMENTOS_ALIMENTARES, SUPLEMENTOS_COMUNS, TEMPOS_COZINHAR } from '../types';
 import { idadeDe } from '../calc';
 import { aplicarTema } from '../theme';
 import { IconeExcluir, IconeSalvar, IconePerfil } from './Icones';
@@ -178,7 +178,16 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
       alert('Dê um nome para o perfil.');
       return;
     }
-    aoSalvar({ ...form, idade: idadeDe(form.nascimento) ?? form.idade });
+    // Orçamento/tempo são seleção única (sempre deveriam ter um valor) e equipamentos sempre tem
+    // ao menos o básico — preenche um padrão sensato se a pessoa nunca tocou no campo, em vez de
+    // salvar vazio e deixar o gerador de dieta sem essa informação.
+    aoSalvar({
+      ...form,
+      idade: idadeDe(form.nascimento) ?? form.idade,
+      orcamentoAlimentar: form.orcamentoAlimentar || 'Moderado',
+      tempoParaCozinhar: form.tempoParaCozinhar || TEMPOS_COZINHAR[1],
+      equipamentosCozinha: form.equipamentosCozinha || 'Fogão',
+    });
   }
 
   // ---- suplementos: checklist + campo livre ----
@@ -195,6 +204,22 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
   function alternarSup(nome: string) {
     const novo = supsMarcados.includes(nome) ? supsMarcados.filter((s) => s !== nome) : [...supsMarcados, nome];
     montarSuplementos(novo, supsOutros);
+  }
+
+  // ---- equipamentos de cozinha: checklist + campo livre (mesmo padrão dos suplementos) ----
+  const listaEquip = (form.equipamentosCozinha ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const equipMarcados = EQUIPAMENTOS_COZINHA_COMUNS.filter((e) => listaEquip.some((x) => x.toLowerCase() === e.toLowerCase()));
+  const equipOutros = listaEquip
+    .filter((x) => !EQUIPAMENTOS_COZINHA_COMUNS.some((e) => e.toLowerCase() === x.toLowerCase()))
+    .join(', ');
+
+  function montarEquipamentos(marcados: string[], outros: string) {
+    set('equipamentosCozinha', [...marcados, outros.trim()].filter(Boolean).join(', '));
+  }
+
+  function alternarEquip(nome: string) {
+    const novo = equipMarcados.includes(nome) ? equipMarcados.filter((e) => e !== nome) : [...equipMarcados, nome];
+    montarEquipamentos(novo, equipOutros);
   }
 
   // Tema é aplicado e salvo imediatamente (não espera o botão "Salvar" geral), pra não
@@ -268,24 +293,35 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
       <textarea value={form.geladeira ?? ''} onChange={(e) => set('geladeira', e.target.value)} placeholder="Ex.: ovos, frango, arroz, banana, aveia, batata-doce..." />
 
       <label>Orçamento para alimentação</label>
-      <input
-        value={form.orcamentoAlimentar ?? ''}
-        onChange={(e) => set('orcamentoAlimentar', e.target.value)}
-        placeholder="Ex.: apertado, moderado, sem restrição de custo"
-      />
-
-      <label>Equipamentos de cozinha disponíveis</label>
-      <input
-        value={form.equipamentosCozinha ?? ''}
-        onChange={(e) => set('equipamentosCozinha', e.target.value)}
-        placeholder="Ex.: só fogão e panela, tenho airfryer e forno..."
-      />
+      <div className="chips-tipo">
+        {ORCAMENTOS_ALIMENTARES.map((o) => (
+          <button key={o} type="button" className={`chip ${(form.orcamentoAlimentar ?? 'Moderado') === o ? 'ativa' : ''}`} onClick={() => set('orcamentoAlimentar', o)}>
+            {o}
+          </button>
+        ))}
+      </div>
 
       <label>Tempo disponível para cozinhar</label>
+      <div className="chips-tipo">
+        {TEMPOS_COZINHAR.map((t) => (
+          <button key={t} type="button" className={`chip ${(form.tempoParaCozinhar ?? TEMPOS_COZINHAR[1]) === t ? 'ativa' : ''}`} onClick={() => set('tempoParaCozinhar', t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <label>Equipamentos de cozinha disponíveis</label>
+      <div className="chips-tipo">
+        {EQUIPAMENTOS_COZINHA_COMUNS.map((e) => (
+          <button key={e} type="button" className={`chip ${equipMarcados.includes(e) ? 'ativa' : ''}`} onClick={() => alternarEquip(e)}>
+            {equipMarcados.includes(e) ? '✓ ' : ''}{e}
+          </button>
+        ))}
+      </div>
       <input
-        value={form.tempoParaCozinhar ?? ''}
-        onChange={(e) => set('tempoParaCozinhar', e.target.value)}
-        placeholder="Ex.: até 20 min por refeição, só no fim de semana (meal prep)"
+        value={equipOutros}
+        onChange={(e) => montarEquipamentos(equipMarcados, e.target.value)}
+        placeholder="Outros equipamentos (ex.: churrasqueira elétrica, sanduicheira...)"
       />
 
       <label>Suplementos que costuma tomar</label>

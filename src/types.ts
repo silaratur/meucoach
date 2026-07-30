@@ -36,6 +36,13 @@ export const SUPLEMENTOS_COMUNS = [
   'Melatonina',
 ];
 
+// Faixa única (seleção exclusiva, tipo chip) — texto livre deixava o campo vazio com frequência
+// demais pro gerador de dieta depender dele; uma lista fechada garante sempre um valor.
+export const ORCAMENTOS_ALIMENTARES = ['Apertado', 'Moderado', 'Sem restrição de custo'];
+export const TEMPOS_COZINHAR = ['Até 15 min por refeição', '15 a 30 min por refeição', '30 a 60 min por refeição', 'Só no fim de semana (meal prep)'];
+
+export const EQUIPAMENTOS_COZINHA_COMUNS = ['Fogão', 'Forno', 'Micro-ondas', 'Air fryer', 'Liquidificador', 'Panela de pressão', 'Churrasqueira'];
+
 export type NivelExperiencia = 'nunca' | 'iniciante' | 'intermediario' | 'avancado';
 
 export const NIVEIS_EXPERIENCIA: { value: NivelExperiencia; label: string }[] = [
@@ -372,6 +379,7 @@ export interface PlanoAlimentar {
   bancos: BancoRefeicoesSemana[]; // 1 item (só "A") ou 2 (A+B)
   diasModelo: DiaModeloAlimentar[]; // 7 itens (só template A) ou 14 (A+B) — só metas, sem conteúdo de refeição
   planejamentoPreparoSemanal?: string; // markdown — ordem de preparo, o que congelar, como economizar tempo
+  estrategiaSuplementacao?: string; // markdown — avaliação dos suplementos do perfil + sugestões, considerando objetivo e treino
   listaCompras: ItemListaCompras[]; // agregada a partir da opção PRINCIPAL de cada slot, para TODO o período do plano
   recomendacoesGerais?: string; // markdown
   criadoEm: string;

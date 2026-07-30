@@ -1157,7 +1157,7 @@ const SCHEMA_SLOT_REFEICAO = {
     objetivoNutricional: { type: 'string', description: 'Ex.: "alto em proteína, leve e rápido de preparar de manhã"' },
     opcoes: {
       type: 'array',
-      description: 'EXATAMENTE 5 opções (a primeira é a "receita principal", as outras 4 são alternativas) — variando de verdade a proteína principal, o vegetal/legume e o modo de preparo entre elas, nunca só o nome.',
+      description: 'EXATAMENTE 5 combinações, uma pra cada dia do rodízio semanal (não são alternativas de escolha) — cada uma com proteína principal, vegetal/legume e modo de preparo DIFERENTES das outras, seguindo a rotação de proteína obrigatória do prompt.',
       items: SCHEMA_OPCAO_REFEICAO,
     },
   },
@@ -1197,9 +1197,13 @@ function construirSchemaPlanoAlimentar(semanaModeloB) {
         type: 'string',
         description: 'Markdown: ordem ideal de preparo, quais opções preparar juntas, o que pode ser congelado, prazos de validade refrigerado/congelado, e estratégias pra reduzir tempo na cozinha durante a semana',
       },
-      recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
+      estrategiaSuplementacao: {
+        type: 'string',
+        description: 'Markdown: avaliação dos suplementos que o aluno já usa (se houver) — mantenha, ajuste o horário/dose, ou sugira parar — e se falta algo relevante pro objetivo/treino dele. Se o aluno não usa suplemento nenhum, diga se algum faria sentido (nunca invente que ele já toma). Nunca prescreva quantidade farmacológica, só orientação alimentar geral.',
+      },
+      recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições e como adaptar o cardápio nas próximas semanas' },
     },
-    required: ['nome', 'avaliacaoInicial', 'estrategia', 'bancos', 'planejamentoPreparoSemanal', 'recomendacoesGerais'],
+    required: ['nome', 'avaliacaoInicial', 'estrategia', 'bancos', 'planejamentoPreparoSemanal', 'estrategiaSuplementacao', 'recomendacoesGerais'],
     additionalProperties: false,
   };
 }
@@ -1355,7 +1359,7 @@ app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
 // contexto de perfil/metas da chamada original pra manter o padrão de qualidade.
 async function completarSlotsFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao }) {
   const listaSlots = faltando.map((f) => `- semanaModelo "${f.semanaModelo}", tipo "${ROTULOS_REFEICAO_PLANO[f.tipo] ?? f.tipo}"`).join('\n');
-  const user = `Você é o mesmo médico nutrólogo esportivo (e chef) que já montou a maior parte deste plano alimentar (mesmo perfil, mesmas metas). Na resposta anterior, exatamente estes bancos de refeição ficaram faltando — gere SOMENTE eles agora, cada um com EXATAMENTE 5 opções (receita principal + 4 alternativas variando proteína/vegetal/modo de preparo), com o mesmo padrão de qualidade do restante do cardápio:
+  const user = `Você é o mesmo médico nutrólogo esportivo (e chef) que já montou a maior parte deste plano alimentar (mesmo perfil, mesmas metas). Na resposta anterior, exatamente estes bancos de refeição ficaram faltando — gere SOMENTE eles agora, cada um com EXATAMENTE 5 combinações (uma pra cada dia do rodízio semanal, não alternativas de escolha), cada uma com proteína/vegetal/modo de preparo diferentes das outras (nunca repita a mesma proteína nas 5 — varie entre frango, carne bovina magra, peixe, ovos e suíno/peru/leguminosa), com o mesmo padrão de qualidade do restante do cardápio:
 
 ${listaSlots}
 
@@ -1389,40 +1393,62 @@ Montar um PLANO ALIMENTAR ESTRUTURADO de ${semanas === 1 ? '1 semana' : `${seman
 
 # ORDEM DE RACIOCÍNIO — siga nesta ordem antes de responder
 
-1. Leia todo o perfil do aluno abaixo: objetivo, corpo, rotina, treino, sono, restrições de saúde, alergias/restrições alimentares, preferências, orçamento, equipamentos de cozinha e tempo disponível para cozinhar.
+1. Leia todo o perfil do aluno abaixo: objetivo, corpo, rotina, treino, sono, restrições de saúde, alergias/restrições alimentares, preferências, orçamento, equipamentos de cozinha, tempo disponível para cozinhar e suplementos que já usa.
 2. Verifique conflitos ANTES de montar qualquer opção: nenhum ingrediente pode violar uma restrição de saúde, alergia ou algo que o aluno não come (ex.: nunca usar leite/derivados se houver intolerância a lactose informada). Se notar um conflito em potencial, escolha outro ingrediente.
 3. As metas de calorias/macros por dia e por refeição (seção abaixo) já foram calculadas pelo app — use como alvo, sem recalcular do zero.
-4. Gere as 5 opções de cada refeição variando DE VERDADE entre elas: proteína principal diferente, vegetal/legume diferente e método de preparo diferente (grelhado, assado, cozido no vapor, salteado, cru) — nunca repita a mesma proteína ou o mesmo método em duas opções seguidas da mesma refeição.
-5. Reaproveite os mesmos ingredientes-base (a mesma proteína, o mesmo grão) em mais de uma opção/refeição sempre que fizer sentido, pra reduzir desperdício e otimizar o custo — sem repetir a receita inteira.
-6. Use nomes e unidades EXATAMENTE iguais pro mesmo ingrediente em toda opção onde ele aparecer (o app monta a lista de compras somando por nome exato).
+4. Gere as 5 combinações de cada refeição seguindo a ROTAÇÃO DE PROTEÍNA OBRIGATÓRIA abaixo — cada uma delas é o cardápio real de um dia diferente da semana (o app faz o rodízio automaticamente), não um menu de escolha.
+5. Reaproveite os mesmos ingredientes-base (a mesma proteína, o mesmo grão) em mais de uma combinação/refeição sempre que fizer sentido, pra reduzir desperdício e otimizar o custo — sem repetir a receita inteira.
+6. Use nomes e unidades EXATAMENTE iguais pro mesmo ingrediente em toda combinação onde ele aparecer, seguindo a UNIDADE CORRETA POR TIPO DE ALIMENTO abaixo.
 7. Confira se o cardápio completo atende ao objetivo informado (ex.: hipertrofia pede proteína e superávit calórico consistentes; emagrecimento pede défice e saciedade).
-8. Escreva o planejamento de preparo semanal (campo "planejamentoPreparoSemanal").
-9. Revise tudo mais uma vez antes de responder — corrija qualquer conflito ou inconsistência que encontrar.
+8. Escreva o planejamento de preparo semanal (campo "planejamentoPreparoSemanal") e a estratégia de suplementação (campo "estrategiaSuplementacao").
+9. Revise tudo mais uma vez antes de responder — corrija qualquer conflito, repetição de proteína ou unidade errada que encontrar.
 
 # ESTRUTURA DO CARDÁPIO
 
-Gere ${semanaModeloB ? 'DOIS bancos de refeição alternados ("A" e "B")' : 'UM único banco de refeição ("A")'}. Cada banco tem um slot por tipo de refeição incluído, e cada slot tem EXATAMENTE 5 opções completas (a primeira é a receita principal, as outras 4 são alternativas) — essas 5 opções são compartilhadas por TODOS os dias da semana daquele banco; o app decide quais dias usam qual banco, e o aluno escolhe qual das 5 opções comer em cada ocasião. NÃO gere conteúdo específico por dia individual.
+Gere ${semanaModeloB ? 'DOIS bancos de refeição alternados ("A" e "B")' : 'UM único banco de refeição ("A")'}. Cada banco tem um slot por tipo de refeição incluído, e cada slot tem EXATAMENTE 5 combinações completas (a primeira é a combinação 1, as outras 4 seguem a mesma numeração). Pense nessas 5 combinações como o REVEZAMENTO REAL da semana: o app usa uma combinação diferente a cada dia (dia 1 usa a combinação 1, dia 2 usa a combinação 2, e assim por diante, voltando pra 1 depois da 5ª) — elas não são um cardápio de escolha livre pro aluno, são o que ele efetivamente vai comer em cada dia. Por isso a variedade entre elas importa de verdade: um aluno que segue o plano à risca vai comer as 5 combinações em rodízio a semana inteira. NÃO gere conteúdo específico por dia individual (o rodízio é automático).
 ${semanaModeloB ? `O banco A se repete ${repeticoesA}x e o banco B se repete ${repeticoesB}x ao longo das ${semanas} semanas civis do plano (semanas ímpares usam A, pares usam B) — os dois bancos devem ter cardápios visivelmente diferentes entre si.` : ''}
 
 Gere refeições APENAS destes tipos, exatamente estes e nenhum outro: ${rotulosRefeicao.join(', ') || 'nenhum tipo selecionado — não gere nenhum banco'}.
 
-# CADA OPÇÃO DE REFEIÇÃO DEVE TRAZER
+# ROTAÇÃO DE PROTEÍNA OBRIGATÓRIA (não é sugestão — é regra)
 
-Ingredientes com quantidades exatas; modo de preparo passo a passo (vazio só quando realmente não exigir preparo, ex.: "1 banana"); tempo de preparo, rendimento e grau de dificuldade; armazenamento, congelamento (quando aplicável) e reaquecimento; substituições equivalentes pros principais ingredientes; fibras e sódio estimados (calorias/proteína/carboidrato/gordura o app já calcula somando os itens, não precisa repetir o total).
+Erro comum a evitar: gerar as 5 combinações de uma refeição todas com a MESMA proteína (ex.: peito de frango em todas). Isso é proibido. Pra cada slot de refeição que tenha uma proteína como prato principal, distribua as 5 combinações assim, adaptando ao que o aluno pode comer (perfil abaixo):
+- Combinação 1: frango (peito, coxa ou sobrecoxa)
+- Combinação 2: carne bovina magra (patinho, alcatra, coxão mole ou músculo)
+- Combinação 3: peixe (tilápia, atum, sardinha ou salmão)
+- Combinação 4: ovos (inteiros ou claras)
+- Combinação 5: suíno magro (lombo), peru, ou — se o aluno for vegetariano/vegano ou não puder comer alguma das anteriores — uma leguminosa completa (grão-de-bico, lentilha, feijão com arroz, tofu)
+Pra refeições sem proteína como foco (ex.: lanches só de fruta/oleaginosa), varie em vez disso o tipo de fruta/oleaginosa e o método (in natura, batido, assado). O mesmo princípio vale pro vegetal/legume de acompanhamento e pro método de preparo (grelhado, assado, cozido no vapor, salteado, cru) — nunca repita vegetal ou método em duas combinações seguidas.
+
+# UNIDADE CORRETA POR TIPO DE ALIMENTO
+
+Use a unidade que faz sentido pra cada alimento, nunca gramas pra tudo:
+- Itens contáveis/individuais: "unidade" — ex.: banana, ovo, pão francês, fatia de pão de forma, iogurte individual, fruta inteira (maçã, laranja).
+- Alimentos a granel/preparados: "g" — ex.: arroz, carne, macarrão, aveia, queijo, frutas picadas.
+- Líquidos: "ml" — ex.: leite, óleo, água, suco.
+- Colheres/xícaras só quando for mesmo assim que se mede na prática (ex.: azeite, pasta de amendoim, farinha em pequena quantidade).
+
+# CADA COMBINAÇÃO DE REFEIÇÃO DEVE TRAZER
+
+Ingredientes com quantidades exatas (na unidade certa, ver acima); modo de preparo passo a passo (vazio só quando realmente não exigir preparo, ex.: "1 banana"); tempo de preparo, rendimento e grau de dificuldade; armazenamento, congelamento (quando aplicável) e reaquecimento; substituições equivalentes pros principais ingredientes; fibras e sódio estimados (calorias/proteína/carboidrato/gordura o app já calcula somando os itens, não precisa repetir o total).
 
 # METAS CALÓRICAS E MACROS — ALVO POR REFEIÇÃO E POR DIA
 
-Os valores abaixo já foram calculados pelo app a partir do perfil e do treino do aluno (dias de treino têm meta maior que dias de descanso). Pra cada dia, além da meta total, você recebe um alvo sugerido POR REFEIÇÃO — use-o como ponto de partida pra escolher os itens e ajuste as quantidades (gramas) até a SOMA de calorias/proteína/carboidrato/gordura dos itens de cada opção ficar próxima do alvo dela (tolerância de ~10%). O mais importante é que a SOMA DE TODAS AS REFEIÇÕES DO DIA fique dentro de ~5% da meta diária total.
+Os valores abaixo já foram calculados pelo app a partir do perfil e do treino do aluno (dias de treino têm meta maior que dias de descanso). Pra cada dia, além da meta total, você recebe um alvo sugerido POR REFEIÇÃO — use-o como ponto de partida pra escolher os itens e ajuste as quantidades (gramas) até a SOMA de calorias/proteína/carboidrato/gordura dos itens de cada combinação ficar próxima do alvo dela (tolerância de ~10%). O mais importante é que a SOMA DE TODAS AS REFEIÇÕES DO DIA fique dentro de ~5% da meta diária total.
 
 ${textoMetasPorDiaSemana(metasPorDiaSemana, tiposValidos)}
 
 # NOMES CONSISTENTES (para a lista de compras)
 
-O app monta a lista de compras automaticamente somando as quantidades de "itens" — ele soma casando pelo nome EXATO, sem adivinhar sinônimos. Use SEMPRE o mesmo nome e a mesma unidade para o mesmo ingrediente sempre que ele aparecer em opções diferentes (ex.: sempre "Peito de frango" com unidade "g" — nunca alternar com "Frango grelhado" ou trocar a unidade).
+O app monta a lista de compras automaticamente somando as quantidades de "itens" — ele soma casando pelo nome EXATO, sem adivinhar sinônimos. Use SEMPRE o mesmo nome e a mesma unidade para o mesmo ingrediente sempre que ele aparecer em combinações diferentes (ex.: sempre "Peito de frango" com unidade "g" — nunca alternar com "Frango grelhado" ou trocar a unidade).
 
 # PLANEJAMENTO DE PREPARO SEMANAL (meal prep)
 
-Preencha "planejamentoPreparoSemanal" com um guia prático em markdown: ordem ideal de preparo, quais opções preparar juntas, o que pode ser congelado, prazo de validade refrigerado/congelado, e estratégias pra reduzir tempo na cozinha durante a semana — considerando o tempo disponível e os equipamentos do aluno (perfil abaixo).
+Preencha "planejamentoPreparoSemanal" com um guia prático em markdown: ordem ideal de preparo, quais combinações preparar juntas, o que pode ser congelado, prazo de validade refrigerado/congelado, e estratégias pra reduzir tempo na cozinha durante a semana — considerando o tempo disponível e os equipamentos do aluno (perfil abaixo).
+
+# SUPLEMENTAÇÃO
+
+Preencha "estrategiaSuplementacao" avaliando os suplementos que o aluno já informou no perfil (se houver) — mantenha, ajuste dose/horário (ex.: creatina diária, whey pós-treino), ou diga se algum não faz sentido pro objetivo dele. Se ele não usa nenhum, sugira apenas o que teria embasamento real pro caso dele (nunca invente que ele já toma algo que não informou). Foco em orientação alimentar/timing, nunca dose farmacológica.
 
 ## Perfil do aluno
 ${perfilTexto(perfil)}
@@ -1521,6 +1547,7 @@ ${textoAtividadeRecente(atividadeRecente)}`;
       bancos,
       diasModelo,
       planejamentoPreparoSemanal: resp.planejamentoPreparoSemanal || undefined,
+      estrategiaSuplementacao: resp.estrategiaSuplementacao || undefined,
       listaCompras: construirListaComprasServer(bancos, repeticoesA, repeticoesB).map((i) => ({ id: uid(), ...i })),
       recomendacoesGerais: resp.recomendacoesGerais,
       criadoEm: new Date().toISOString(),
