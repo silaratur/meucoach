@@ -267,6 +267,27 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
       <label>O que tem na geladeira / despensa</label>
       <textarea value={form.geladeira ?? ''} onChange={(e) => set('geladeira', e.target.value)} placeholder="Ex.: ovos, frango, arroz, banana, aveia, batata-doce..." />
 
+      <label>Orçamento para alimentação</label>
+      <input
+        value={form.orcamentoAlimentar ?? ''}
+        onChange={(e) => set('orcamentoAlimentar', e.target.value)}
+        placeholder="Ex.: apertado, moderado, sem restrição de custo"
+      />
+
+      <label>Equipamentos de cozinha disponíveis</label>
+      <input
+        value={form.equipamentosCozinha ?? ''}
+        onChange={(e) => set('equipamentosCozinha', e.target.value)}
+        placeholder="Ex.: só fogão e panela, tenho airfryer e forno..."
+      />
+
+      <label>Tempo disponível para cozinhar</label>
+      <input
+        value={form.tempoParaCozinhar ?? ''}
+        onChange={(e) => set('tempoParaCozinhar', e.target.value)}
+        placeholder="Ex.: até 20 min por refeição, só no fim de semana (meal prep)"
+      />
+
       <label>Suplementos que costuma tomar</label>
       <div className="chips-tipo">
         {SUPLEMENTOS_COMUNS.map((s) => (

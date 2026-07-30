@@ -261,48 +261,6 @@ export interface MetaPorDiaSemana {
   meta: MetaDiaAlimentar | null;
 }
 
-export interface ItemRefeicaoIA {
-  nome: string;
-  quantidade: number;
-  unidade: string;
-  calorias: number;
-  proteinas_g: number;
-  carboidratos_g: number;
-  gorduras_g: number;
-  receitaNome: string;
-}
-
-export interface RefeicaoPlanoIA {
-  tipo: TipoRefeicao;
-  nomeSugerido: string;
-  horarioSugerido: string;
-  itens: ItemRefeicaoIA[];
-  observacao: string;
-}
-
-export interface DiaModeloAlimentarIA {
-  semanaModelo: 'A' | 'B';
-  diaSemana: string;
-  refeicoes: RefeicaoPlanoIA[];
-}
-
-export interface ReceitaPlanoIA {
-  nome: string;
-  tempoPreparoMin: number;
-  ingredientes: { nome: string; quantidade: number; unidade: string }[];
-  modoPreparo: string[];
-}
-
-export interface PlanoAlimentarIA {
-  nome: string;
-  semanas: number;
-  avaliacaoInicial: string;
-  estrategia: string;
-  diasModelo: DiaModeloAlimentarIA[];
-  receitas: ReceitaPlanoIA[];
-  recomendacoesGerais: string;
-}
-
 export function gerarPlanoAlimentar(
   perfil: Perfil,
   semanas: number,

@@ -440,6 +440,9 @@ function perfilTexto(p) {
     p.restricoes ? `Restrições/alergias alimentares: ${p.restricoes}` : null,
     p.preferencias ? `Preferências alimentares: ${p.preferencias}` : null,
     p.geladeira ? `Tem em casa (geladeira/despensa): ${p.geladeira}` : null,
+    p.orcamentoAlimentar ? `Orçamento para alimentação: ${p.orcamentoAlimentar}` : null,
+    p.equipamentosCozinha ? `Equipamentos de cozinha disponíveis: ${p.equipamentosCozinha}` : null,
+    p.tempoParaCozinhar ? `Tempo disponível para cozinhar: ${p.tempoParaCozinhar}` : null,
     p.suplementos ? `Suplementos habituais: ${p.suplementos}` : null,
   ]
     .filter(Boolean)
@@ -1093,6 +1096,10 @@ const ROTULOS_REFEICAO_PLANO = {
   ceia: 'Ceia',
 };
 
+// Mesma lista de src/types.ts (DIAS_SEMANA) — repetida aqui porque o servidor não importa
+// código do cliente.
+const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
 const SCHEMA_ITEM_REFEICAO_PLANO = {
   type: 'object',
   properties: {
@@ -1103,102 +1110,113 @@ const SCHEMA_ITEM_REFEICAO_PLANO = {
     proteinas_g: { type: 'number' },
     carboidratos_g: { type: 'number' },
     gorduras_g: { type: 'number' },
-    receitaNome: { type: 'string', description: 'Nome EXATO de uma receita em "receitas" se este item exigir preparo com passos reais; "" se for simples o bastante (ex.: "1 banana", "2 colheres de pasta de amendoim")' },
   },
-  required: ['nome', 'quantidade', 'unidade', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g', 'receitaNome'],
+  required: ['nome', 'quantidade', 'unidade', 'calorias', 'proteinas_g', 'carboidratos_g', 'gorduras_g'],
   additionalProperties: false,
 };
 
-const SCHEMA_REFEICAO_PLANO = {
+// Uma das 5 opções de um slot de refeição — o preparo completo mora direto aqui (sem mais uma
+// lista solta de "receitas" resolvida por nome, que já causou bug de casamento de nome antes).
+// calorias/proteína/carboidrato/gordura NÃO entram aqui — são somadas deterministicamente a
+// partir de "itens" no servidor (mais confiável que pedir o total pronto pra IA); só fibras e
+// sódio ficam a cargo da IA, porque não têm uma fonte por item pra somar.
+const SCHEMA_OPCAO_REFEICAO = {
+  type: 'object',
+  properties: {
+    nomeSugerido: { type: 'string' },
+    itens: { type: 'array', items: SCHEMA_ITEM_REFEICAO_PLANO },
+    modoPreparo: { type: 'array', items: { type: 'string' }, description: 'Passos numerados; [] quando não exige preparo real (ex.: "1 banana + 2 colheres de pasta de amendoim")' },
+    tempoPreparoMin: { type: 'integer', description: '0 quando não exige preparo' },
+    rendimento: { type: 'string', description: 'Ex.: "1 porção", "2 porções (sobra pro dia seguinte)"' },
+    dificuldade: { type: 'string', enum: ['fácil', 'médio', 'difícil'] },
+    armazenamento: { type: 'string', description: 'Validade guardado na geladeira; "" quando comido na hora' },
+    congelamento: { type: 'string', description: 'Se pode congelar e por quanto tempo; "" quando não se aplica' },
+    reaquecimento: { type: 'string', description: 'Como reaquecer; "" quando não se aplica' },
+    substituicoes: { type: 'string', description: 'Trocas equivalentes pros principais ingredientes (ex.: "frango por tilápia; arroz por quinoa")' },
+    observacao: { type: 'string', description: 'Nota curta opcional (ex.: papel pré/pós-treino); "" se não houver' },
+    fibras_g: { type: 'number' },
+    sodio_mg: { type: 'number' },
+  },
+  required: [
+    'nomeSugerido', 'itens', 'modoPreparo', 'tempoPreparoMin', 'rendimento', 'dificuldade',
+    'armazenamento', 'congelamento', 'reaquecimento', 'substituicoes', 'observacao', 'fibras_g', 'sodio_mg',
+  ],
+  additionalProperties: false,
+};
+
+// Banco de opções de UM tipo de refeição (ex.: almoço) — compartilhado por todos os dias da
+// semana-modelo, em vez de cada dia individual ter seu próprio conjunto de 5 opções. Isso é o
+// que evita o volume explodir com o número de dias (7/14 dias × 5-6 refeições × 5 opções cada
+// seria centenas de receitas detalhadas numa resposta só — inviável e foi o que já estourou o
+// limite de tamanho de gramática compilada da API duas vezes antes desta mudança de arquitetura).
+const SCHEMA_SLOT_REFEICAO = {
   type: 'object',
   properties: {
     tipo: { type: 'string', enum: ['cafe', 'lanche_manha', 'almoco', 'lanche_tarde', 'jantar', 'ceia'] },
-    nomeSugerido: { type: 'string' },
     horarioSugerido: { type: 'string', description: 'Ex.: "07:30", calibrado ao horário de treino do aluno quando fizer sentido; "" se não houver sugestão específica' },
-    itens: { type: 'array', items: SCHEMA_ITEM_REFEICAO_PLANO },
-    observacao: { type: 'string', description: 'Nota curta opcional (ex.: papel pré/pós-treino desta refeição); "" se não houver' },
+    objetivoNutricional: { type: 'string', description: 'Ex.: "alto em proteína, leve e rápido de preparar de manhã"' },
+    opcoes: {
+      type: 'array',
+      description: 'EXATAMENTE 5 opções (a primeira é a "receita principal", as outras 4 são alternativas) — variando de verdade a proteína principal, o vegetal/legume e o modo de preparo entre elas, nunca só o nome.',
+      items: SCHEMA_OPCAO_REFEICAO,
+    },
   },
-  required: ['tipo', 'nomeSugerido', 'horarioSugerido', 'itens', 'observacao'],
+  required: ['tipo', 'horarioSugerido', 'objetivoNutricional', 'opcoes'],
   additionalProperties: false,
 };
 
-// Mesma lista de src/types.ts (DIAS_SEMANA) — repetida aqui porque o servidor não importa
-// código do cliente. O enum abaixo obriga a IA a usar exatamente esses 7 valores (com acento
-// certo), pra não gerar sábado/domingo com uma grafia que o app não reconhece.
-const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-
-const SCHEMA_DIA_MODELO_ALIMENTAR = {
+const SCHEMA_BANCO_SEMANA = {
   type: 'object',
   properties: {
     semanaModelo: { type: 'string', enum: ['A', 'B'] },
-    diaSemana: { type: 'string', enum: DIAS_SEMANA },
-    refeicoes: { type: 'array', items: SCHEMA_REFEICAO_PLANO },
+    slots: { type: 'array', items: SCHEMA_SLOT_REFEICAO },
   },
-  required: ['semanaModelo', 'diaSemana', 'refeicoes'],
+  required: ['semanaModelo', 'slots'],
   additionalProperties: false,
 };
 
-const SCHEMA_RECEITA_PLANO = {
-  type: 'object',
-  properties: {
-    nome: { type: 'string' },
-    tempoPreparoMin: { type: 'integer' },
-    ingredientes: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: { nome: { type: 'string' }, quantidade: { type: 'number' }, unidade: { type: 'string' } },
-        required: ['nome', 'quantidade', 'unidade'],
-        additionalProperties: false,
-      },
-    },
-    modoPreparo: { type: 'array', items: { type: 'string' }, description: 'Passos numerados, um item por passo' },
-  },
-  required: ['nome', 'tempoPreparoMin', 'ingredientes', 'modoPreparo'],
-  additionalProperties: false,
-};
-
-// Duas tentativas anteriores de garantir os 7 dias via schema já falharam em produção:
-// 1) diasModelo como array com minItems/maxItems fixados em 7/14 — a API da Anthropic rejeita
-//    minItems diferente de 0 ou 1 em arrays ("'minItems' values other than 0 or 1 are not
-//    supported"), então isso nunca chegava a gerar nada.
-// 2) cada semana-modelo como objeto com um campo obrigatório por dia (contornando o problema
-//    acima) — só trocou de erro: "The compiled grammar is too large". Forçar uma contagem exata
-//    de um schema aninhado não-trivial faz o compilador de gramática duplicar esse schema uma
-//    vez por instância exigida; aqui isso duplicava SCHEMA_REFEICAO_PLANO (que já contém um
-//    array de itens com 8 campos) 7 ou 14 vezes, estourando o limite de tamanho.
-// A saída: parar de tentar forçar a contagem exata NO SCHEMA. diasModelo volta a ser um array
-// simples (o schema do item é compilado UMA vez, repetido pela própria semântica de array) — a
-// garantia dos 7 dias completos passa a vir DEPOIS da resposta, em completarDiasFaltantes()
-// (processarPlanoAlimentar): se a IA pular algum dia, um segundo pedido pequeno — só os dias que
-// faltaram, schema minúsculo — completa o restante sem re-arriscar nenhum dos dois erros acima.
-function construirSchemaPlanoAlimentar() {
+// O schema NÃO pede mais "diasModelo" pra IA — os 7/14 dias e suas metas já são 100%
+// determináveis pelo próprio servidor a partir de metasPorDiaSemana (ver processarPlanoAlimentar),
+// já que na arquitetura de banco de receitas os dias não carregam conteúdo próprio, só apontam
+// pro banco da semana-modelo certa. Isso elimina de vez o problema de contagem exata de dias que
+// gerou dois erros 400 seguidos antes desta mudança (minItems rejeitado, depois gramática grande
+// demais) — o schema simplesmente não tem mais nenhum "obrigatório exatamente N" pra forçar.
+function construirSchemaPlanoAlimentar(semanaModeloB) {
   return {
     type: 'object',
     properties: {
       nome: { type: 'string' },
-      avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno e do que foi levado em conta (2-4 frases)' },
-      estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, e como as semanas-modelo A e B se diferenciam (quando houver B)' },
-      diasModelo: {
+      avaliacaoInicial: { type: 'string', description: 'Resumo do perfil do aluno, do que foi levado em conta, e de qualquer conflito entre objetivo/restrições/preferências e como foi resolvido (2-4 frases)' },
+      estrategia: { type: 'string', description: 'Como o cardápio foi pensado: distribuição de macros, papel dos dias de treino vs. descanso, como as semanas-modelo A e B se diferenciam (quando houver B), e como o custo/reaproveitamento de ingredientes foi otimizado' },
+      bancos: {
         type: 'array',
-        description: 'Um item por dia — 7 dias (Segunda a Domingo) da semana-modelo "A", seguidos dos 7 dias da semana-modelo "B" quando houver. NUNCA pule Sábado ou Domingo, e nunca repita o mesmo dia duas vezes dentro da mesma semana-modelo.',
-        items: SCHEMA_DIA_MODELO_ALIMENTAR,
+        description: semanaModeloB ? '2 itens: banco "A" e banco "B" (cardápios visivelmente diferentes entre si)' : '1 item: banco "A"',
+        items: SCHEMA_BANCO_SEMANA,
       },
-      receitas: { type: 'array', items: SCHEMA_RECEITA_PLANO },
+      planejamentoPreparoSemanal: {
+        type: 'string',
+        description: 'Markdown: ordem ideal de preparo, quais opções preparar juntas, o que pode ser congelado, prazos de validade refrigerado/congelado, e estratégias pra reduzir tempo na cozinha durante a semana',
+      },
       recomendacoesGerais: { type: 'string', description: 'Hidratação, timing de refeições, suplementação e como adaptar o cardápio nas próximas semanas' },
     },
-    required: ['nome', 'avaliacaoInicial', 'estrategia', 'diasModelo', 'receitas', 'recomendacoesGerais'],
+    required: ['nome', 'avaliacaoInicial', 'estrategia', 'bancos', 'planejamentoPreparoSemanal', 'recomendacoesGerais'],
     additionalProperties: false,
   };
 }
 
-// Schema do pedido de complemento — só os dias que faltaram na 1ª resposta, nunca o plano
-// inteiro de novo. Fica pequeno de propósito (normalmente 1-2 dias), então não corre o risco de
-// nenhum dos dois erros documentados acima.
-const SCHEMA_COMPLEMENTO_DIAS = {
+// Schema do pedido de complemento — só os bancos (semanaModelo + tipo de refeição) que faltaram
+// na 1ª resposta, nunca o plano inteiro de novo. Fica pequeno de propósito (normalmente 0-2
+// itens), então não corre o risco de nenhum dos dois erros documentados acima.
+const SCHEMA_SLOT_COM_SEMANA = {
   type: 'object',
-  properties: { dias: { type: 'array', items: SCHEMA_DIA_MODELO_ALIMENTAR } },
-  required: ['dias'],
+  properties: { semanaModelo: { type: 'string', enum: ['A', 'B'] }, ...SCHEMA_SLOT_REFEICAO.properties },
+  required: ['semanaModelo', ...SCHEMA_SLOT_REFEICAO.required],
+  additionalProperties: false,
+};
+const SCHEMA_COMPLEMENTO_SLOTS = {
+  type: 'object',
+  properties: { slots: { type: 'array', items: SCHEMA_SLOT_COM_SEMANA } },
+  required: ['slots'],
   additionalProperties: false,
 };
 
@@ -1254,29 +1272,57 @@ function textoMetasPorDiaSemana(metas, tiposRefeicao) {
     .join('\n\n');
 }
 
-// Teste real mostrou que 20000 é insuficiente até pro caso mais simples (1 semana-modelo, 3
-// refeições) — a lista de compras (JSON gerado por último) saía truncada/vazia. Valores bem
-// mais altos que a estimativa inicial, com folga extra pro cardápio completo de 7 (ou 14) dias.
+// O banco de receitas por tipo de refeição (em vez de por dia) reduz o volume total pro schema
+// (25-50 opções ricas em vez de até 70 refeições soltas + lista de receitas separada), mas cada
+// opção agora carrega bem mais campos (preparo, armazenamento, congelamento, substituições) —
+// folga generosa mantida por precaução, no mesmo patamar dos valores que já funcionaram antes.
 function maxTokensPlanoAlimentar(semanaModeloB, quantidadeRefeicoes) {
-  const templates = semanaModeloB ? 2 : 1;
-  if (templates === 1) return quantidadeRefeicoes <= 3 ? 56000 : 68000;
-  return quantidadeRefeicoes <= 3 ? 78000 : 90000;
+  if (!semanaModeloB) return quantidadeRefeicoes <= 3 ? 70000 : 88000;
+  return quantidadeRefeicoes <= 3 ? 110000 : 130000;
 }
 
 function normalizarNomeItem(s) {
   return s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+function somaCampo(itens, campo) {
+  return Math.round(itens.reduce((acc, i) => acc + (i[campo] || 0), 0) * 10) / 10;
+}
+
+// Categorização por palavra-chave (determinística, não pedida à IA) — mesmo motivo de sempre
+// nesse arquivo: classificação/agregação é mais confiável feita em código do que confiando na IA
+// pra manter um rótulo consistente em toda a lista de compras.
+const CATEGORIAS_INGREDIENTE = [
+  { categoria: 'Proteínas', palavras: ['frango', 'carne', 'peito', 'file', 'file', 'peixe', 'tilapia', 'salmao', 'atum', 'ovo', 'ovos', 'camarao', 'patinho', 'alcatra', 'lombo', 'suino', 'linguica', 'proteina', 'whey', 'tofu'] },
+  { categoria: 'Laticínios', palavras: ['leite', 'iogurte', 'queijo', 'requeijao', 'manteiga', 'margarina', 'coalhada', 'ricota', 'cottage'] },
+  { categoria: 'Grãos e cereais', palavras: ['arroz', 'feijao', 'lentilha', 'grao', 'aveia', 'quinoa', 'macarrao', 'pao', 'farinha', 'granola', 'milho', 'tapioca'] },
+  { categoria: 'Hortifrúti', palavras: ['tomate', 'alface', 'cenoura', 'cebola', 'alho', 'banana', 'maca', 'batata', 'brocolis', 'couve', 'pepino', 'abobrinha', 'pimentao', 'laranja', 'limao', 'morango', 'uva', 'espinafre', 'beterraba', 'abacate', 'manga', 'abacaxi'] },
+  { categoria: 'Temperos e condimentos', palavras: ['sal', 'pimenta', 'azeite', 'oleo', 'vinagre', 'molho', 'tempero', 'oregano', 'paprica', 'cominho', 'mostarda', 'ketchup', 'maionese', 'canela'] },
+  { categoria: 'Bebidas', palavras: ['agua', 'suco', 'cha', 'cafe', 'refrigerante'] },
+];
+function categorizarIngrediente(nome) {
+  const norm = normalizarNomeItem(nome);
+  const achado = CATEGORIAS_INGREDIENTE.find(({ palavras }) => palavras.some((p) => norm.includes(p)));
+  return achado?.categoria ?? 'Outros';
+}
+
 // Espelha construirListaCompras de src/components/DietaTab.tsx — soma determinística das
 // quantidades (pedir pra IA somar tudo é pouco confiável, ela "desiste" no meio da agregação).
-function construirListaComprasServer(diasModelo, semanas) {
-  const repeticoesA = Math.ceil(semanas / 2);
-  const repeticoesB = Math.floor(semanas / 2);
+// Usa só a opção PRINCIPAL (opcoes[0]) de cada slot — as outras 4 são alternativas que o aluno
+// pode ou não escolher, então entrar com as 5 inflaria a lista pra muito além do que ele de fato
+// vai comprar. "mult" é repetições-da-semana-civil × 7 dias, porque agora 1 única opção cobre os
+// 7 dias daquele tipo de refeição na semana-modelo (antes eram 7 refeições diferentes, uma por
+// dia, cada uma contando só o multiplicador de repetição).
+function construirListaComprasServer(bancos, repeticoesA, repeticoesB) {
   const totais = new Map();
-  for (const dia of diasModelo) {
-    const mult = dia.semanaModelo === 'B' ? repeticoesB : repeticoesA;
-    for (const refeicao of dia.refeicoes) {
-      for (const item of refeicao.itens) {
+  for (const banco of bancos) {
+    const semanasRepetidas = banco.semanaModelo === 'B' ? repeticoesB : repeticoesA;
+    if (!semanasRepetidas) continue;
+    const mult = semanasRepetidas * 7;
+    for (const slot of banco.slots) {
+      const principal = slot.opcoes[0];
+      if (!principal) continue;
+      for (const item of principal.itens) {
         const chave = `${normalizarNomeItem(item.nome)}|${normalizarNomeItem(item.unidade)}`;
         const atual = totais.get(chave);
         if (atual) atual.quantidade += item.quantidade * mult;
@@ -1285,8 +1331,8 @@ function construirListaComprasServer(diasModelo, semanas) {
     }
   }
   return [...totais.values()]
-    .map((t) => ({ nome: t.nome, quantidadeTotal: Math.round(t.quantidade * 10) / 10, unidade: t.unidade }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    .map((t) => ({ nome: t.nome, quantidadeTotal: Math.round(t.quantidade * 10) / 10, unidade: t.unidade, categoria: categorizarIngrediente(t.nome) }))
+    .sort((a, b) => a.categoria.localeCompare(b.categoria, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
@@ -1304,25 +1350,23 @@ app.post('/api/ai/plano-alimentar', autenticar, async (req, res) => {
   });
 });
 
-// Pede à IA SÓ os dias (semanaModelo+diaSemana) que faltaram na resposta principal — schema
-// pequeno (ver SCHEMA_COMPLEMENTO_DIAS), não repete o resto do plano. Reaproveita o mesmo
+// Pede à IA SÓ os bancos (semanaModelo+tipo) que faltaram na resposta principal — schema
+// pequeno (ver SCHEMA_COMPLEMENTO_SLOTS), não repete o resto do plano. Reaproveita o mesmo
 // contexto de perfil/metas da chamada original pra manter o padrão de qualidade.
-async function completarDiasFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao, rotulosRefeicao }) {
-  const listaDias = faltando.map((f) => `- semanaModelo "${f.semanaModelo}", diaSemana "${f.diaSemana}"`).join('\n');
-  const user = `Você é o mesmo médico nutrólogo esportivo que já montou a maior parte deste plano alimentar (mesmo perfil, mesmas metas). Na resposta anterior, exatamente estes dias ficaram faltando — gere SOMENTE eles agora, um item por dia, com o mesmo padrão de qualidade e variedade do restante do cardápio:
+async function completarSlotsFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao }) {
+  const listaSlots = faltando.map((f) => `- semanaModelo "${f.semanaModelo}", tipo "${ROTULOS_REFEICAO_PLANO[f.tipo] ?? f.tipo}"`).join('\n');
+  const user = `Você é o mesmo médico nutrólogo esportivo (e chef) que já montou a maior parte deste plano alimentar (mesmo perfil, mesmas metas). Na resposta anterior, exatamente estes bancos de refeição ficaram faltando — gere SOMENTE eles agora, cada um com EXATAMENTE 5 opções (receita principal + 4 alternativas variando proteína/vegetal/modo de preparo), com o mesmo padrão de qualidade do restante do cardápio:
 
-${listaDias}
-
-Gere refeições APENAS destes tipos: ${rotulosRefeicao.join(', ')}.
+${listaSlots}
 
 ${textoMetasPorDiaSemana(metasPorDiaSemana, tiposRefeicao)}
 
 ## Perfil do aluno
 ${perfilTexto(perfil)}
 Observações do aluno para este plano: ${observacoes || 'nenhuma'}`;
-  const response = await chamarIA(user, { schema: SCHEMA_COMPLEMENTO_DIAS, maxTokens: 16000 });
+  const response = await chamarIA(user, { schema: SCHEMA_COMPLEMENTO_SLOTS, maxTokens: 32000 });
   const resp = JSON.parse(textoDaResposta(response));
-  return Array.isArray(resp.dias) ? resp.dias : [];
+  return Array.isArray(resp.slots) ? resp.slots : [];
 }
 
 async function processarPlanoAlimentar(jobId, perfilId, body) {
@@ -1332,36 +1376,53 @@ async function processarPlanoAlimentar(jobId, perfilId, body) {
     const semanaModeloB = semanas >= 2;
     const repeticoesA = Math.ceil(semanas / 2);
     const repeticoesB = Math.floor(semanas / 2);
-    const rotulosRefeicao = (Array.isArray(tiposRefeicao) ? tiposRefeicao : []).map((t) => ROTULOS_REFEICAO_PLANO[t] ?? t);
+    const tiposValidos = (Array.isArray(tiposRefeicao) ? tiposRefeicao : []).filter((t) => t !== 'suplemento');
+    const rotulosRefeicao = tiposValidos.map((t) => ROTULOS_REFEICAO_PLANO[t] ?? t);
 
     const user = `# PERSONA
 
-Você é um médico nutrólogo esportivo com mais de 15 anos de experiência em prescrição alimentar focada em objetivo — emagrecimento, hipertrofia, recomposição corporal, performance e saúde metabólica. Você monta cardápios realistas com comida brasileira acessível, nunca dietas genéricas de internet.
+Você é um médico nutrólogo esportivo com mais de 15 anos de experiência em prescrição alimentar focada em objetivo — emagrecimento, hipertrofia, recomposição corporal, performance e saúde metabólica — e também um chef especializado em culinária prática, saborosa e acessível, usando ingredientes comuns de supermercado/feira. Você nunca gera dietas genéricas de internet.
 
 # OBJETIVO
 
 Montar um PLANO ALIMENTAR ESTRUTURADO de ${semanas === 1 ? '1 semana' : `${semanas} semanas`}, com quantidades e gramas reais por item — não sugestões vagas.
 
+# ORDEM DE RACIOCÍNIO — siga nesta ordem antes de responder
+
+1. Leia todo o perfil do aluno abaixo: objetivo, corpo, rotina, treino, sono, restrições de saúde, alergias/restrições alimentares, preferências, orçamento, equipamentos de cozinha e tempo disponível para cozinhar.
+2. Verifique conflitos ANTES de montar qualquer opção: nenhum ingrediente pode violar uma restrição de saúde, alergia ou algo que o aluno não come (ex.: nunca usar leite/derivados se houver intolerância a lactose informada). Se notar um conflito em potencial, escolha outro ingrediente.
+3. As metas de calorias/macros por dia e por refeição (seção abaixo) já foram calculadas pelo app — use como alvo, sem recalcular do zero.
+4. Gere as 5 opções de cada refeição variando DE VERDADE entre elas: proteína principal diferente, vegetal/legume diferente e método de preparo diferente (grelhado, assado, cozido no vapor, salteado, cru) — nunca repita a mesma proteína ou o mesmo método em duas opções seguidas da mesma refeição.
+5. Reaproveite os mesmos ingredientes-base (a mesma proteína, o mesmo grão) em mais de uma opção/refeição sempre que fizer sentido, pra reduzir desperdício e otimizar o custo — sem repetir a receita inteira.
+6. Use nomes e unidades EXATAMENTE iguais pro mesmo ingrediente em toda opção onde ele aparecer (o app monta a lista de compras somando por nome exato).
+7. Confira se o cardápio completo atende ao objetivo informado (ex.: hipertrofia pede proteína e superávit calórico consistentes; emagrecimento pede défice e saciedade).
+8. Escreva o planejamento de preparo semanal (campo "planejamentoPreparoSemanal").
+9. Revise tudo mais uma vez antes de responder — corrija qualquer conflito ou inconsistência que encontrar.
+
 # ESTRUTURA DO CARDÁPIO
 
-Gere ${semanaModeloB ? 'DUAS semanas-modelo alternadas ("A" e "B")' : 'UMA única semana-modelo ("A")'} — 7 dias cada, dias da semana Segunda a Domingo, TODOS os 7 (incluindo Sábado e Domingo, nunca só dias úteis). NÃO gere um dia único para cada um dos dias do período total; o aplicativo repete/alterna essas semanas-modelo automaticamente ao longo da duração real escolhida.
-${semanaModeloB ? `O template A se repete ${repeticoesA}x e o template B se repete ${repeticoesB}x ao longo das ${semanas} semanas civis do plano (semanas ímpares usam A, pares usam B). Use exatamente esses multiplicadores ao montar a lista de compras agregada.` : ''}
+Gere ${semanaModeloB ? 'DOIS bancos de refeição alternados ("A" e "B")' : 'UM único banco de refeição ("A")'}. Cada banco tem um slot por tipo de refeição incluído, e cada slot tem EXATAMENTE 5 opções completas (a primeira é a receita principal, as outras 4 são alternativas) — essas 5 opções são compartilhadas por TODOS os dias da semana daquele banco; o app decide quais dias usam qual banco, e o aluno escolhe qual das 5 opções comer em cada ocasião. NÃO gere conteúdo específico por dia individual.
+${semanaModeloB ? `O banco A se repete ${repeticoesA}x e o banco B se repete ${repeticoesB}x ao longo das ${semanas} semanas civis do plano (semanas ímpares usam A, pares usam B) — os dois bancos devem ter cardápios visivelmente diferentes entre si.` : ''}
 
-Gere refeições APENAS destes tipos, exatamente estes e nenhum outro: ${rotulosRefeicao.join(', ') || 'nenhum tipo selecionado — não gere nenhuma refeição'}.
+Gere refeições APENAS destes tipos, exatamente estes e nenhum outro: ${rotulosRefeicao.join(', ') || 'nenhum tipo selecionado — não gere nenhum banco'}.
 
-# METAS CALÓRICAS E MACROS — ALVO OBRIGATÓRIO POR REFEIÇÃO E POR DIA
+# CADA OPÇÃO DE REFEIÇÃO DEVE TRAZER
 
-Os valores abaixo já foram calculados pelo app a partir do perfil e do treino do aluno (dias de treino têm meta maior que dias de descanso). Pra cada dia, além da meta total, você recebe um alvo sugerido POR REFEIÇÃO — use-o como ponto de partida pra escolher os itens e ajuste as quantidades (gramas) até a SOMA de calorias/proteína/carboidrato/gordura dos itens de cada refeição ficar próxima do alvo dela (tolerância de ~10%). O mais importante é que a SOMA DE TODAS AS REFEIÇÕES DO DIA fique dentro de ~5% da meta diária total — isso é o que realmente importa pro resultado do aluno, a divisão entre refeições pode variar um pouco desde que o total do dia bata.
+Ingredientes com quantidades exatas; modo de preparo passo a passo (vazio só quando realmente não exigir preparo, ex.: "1 banana"); tempo de preparo, rendimento e grau de dificuldade; armazenamento, congelamento (quando aplicável) e reaquecimento; substituições equivalentes pros principais ingredientes; fibras e sódio estimados (calorias/proteína/carboidrato/gordura o app já calcula somando os itens, não precisa repetir o total).
 
-${textoMetasPorDiaSemana(metasPorDiaSemana, tiposRefeicao)}
+# METAS CALÓRICAS E MACROS — ALVO POR REFEIÇÃO E POR DIA
+
+Os valores abaixo já foram calculados pelo app a partir do perfil e do treino do aluno (dias de treino têm meta maior que dias de descanso). Pra cada dia, além da meta total, você recebe um alvo sugerido POR REFEIÇÃO — use-o como ponto de partida pra escolher os itens e ajuste as quantidades (gramas) até a SOMA de calorias/proteína/carboidrato/gordura dos itens de cada opção ficar próxima do alvo dela (tolerância de ~10%). O mais importante é que a SOMA DE TODAS AS REFEIÇÕES DO DIA fique dentro de ~5% da meta diária total.
+
+${textoMetasPorDiaSemana(metasPorDiaSemana, tiposValidos)}
 
 # NOMES CONSISTENTES (para a lista de compras)
 
-O app monta a lista de compras automaticamente somando as quantidades de "itens" de todas as refeições — ele soma casando pelo nome EXATO, sem adivinhar sinônimos. Por isso, use SEMPRE o mesmo nome e a mesma unidade para o mesmo ingrediente sempre que ele aparecer em refeições diferentes (ex.: sempre "Peito de frango" com unidade "g" em toda refeição que usar esse item — nunca alternar com "Frango grelhado" ou trocar a unidade).
+O app monta a lista de compras automaticamente somando as quantidades de "itens" — ele soma casando pelo nome EXATO, sem adivinhar sinônimos. Use SEMPRE o mesmo nome e a mesma unidade para o mesmo ingrediente sempre que ele aparecer em opções diferentes (ex.: sempre "Peito de frango" com unidade "g" — nunca alternar com "Frango grelhado" ou trocar a unidade).
 
-# RECEITAS
+# PLANEJAMENTO DE PREPARO SEMANAL (meal prep)
 
-Só crie uma receita quando o item exigir preparo com passos reais. Algo como "1 banana + 2 colheres de pasta de amendoim" não precisa de receita — deixe "receitaNome" vazio nesses casos.
+Preencha "planejamentoPreparoSemanal" com um guia prático em markdown: ordem ideal de preparo, quais opções preparar juntas, o que pode ser congelado, prazo de validade refrigerado/congelado, e estratégias pra reduzir tempo na cozinha durante a semana — considerando o tempo disponível e os equipamentos do aluno (perfil abaixo).
 
 ## Perfil do aluno
 ${perfilTexto(perfil)}
@@ -1374,70 +1435,93 @@ ${JSON.stringify(sessoesRecentes ?? [], null, 2)}
 ${textoAtividadeRecente(atividadeRecente)}`;
 
     const maxTokens = maxTokensPlanoAlimentar(semanaModeloB, rotulosRefeicao.length);
-    const response = await chamarIA(user, { schema: construirSchemaPlanoAlimentar(), maxTokens });
+    const response = await chamarIA(user, { schema: construirSchemaPlanoAlimentar(semanaModeloB), maxTokens });
     const resp = JSON.parse(textoDaResposta(response));
 
-    // Confere se a IA gerou os 7 (ou 14) dias esperados — sem garantia via schema (ver
+    // Confere se todo (semanaModelo, tipo) esperado veio na resposta — cada um vira um "slot" de
+    // 5 opções compartilhado pelos dias daquela semana-modelo. Sem garantia via schema (ver
     // comentário em construirSchemaPlanoAlimentar), então a garantia é aqui: o que faltar é
     // pedido de volta numa chamada pequena e extra antes de seguir.
-    const esperados = DIAS_SEMANA.map((dia) => ({ semanaModelo: 'A', diaSemana: dia }));
-    if (semanaModeloB) esperados.push(...DIAS_SEMANA.map((dia) => ({ semanaModelo: 'B', diaSemana: dia })));
-    const presentes = new Set((resp.diasModelo ?? []).map((d) => `${d.semanaModelo}|${d.diaSemana}`));
-    const faltando = esperados.filter((e) => !presentes.has(`${e.semanaModelo}|${e.diaSemana}`));
+    const modelosEsperados = semanaModeloB ? ['A', 'B'] : ['A'];
+    const esperados = modelosEsperados.flatMap((sm) => tiposValidos.map((tipo) => ({ semanaModelo: sm, tipo })));
+    const bancosResp = Array.isArray(resp.bancos) ? resp.bancos : [];
+    const presentes = new Set(bancosResp.flatMap((b) => (b.slots ?? []).map((s) => `${b.semanaModelo}|${s.tipo}`)));
+    const faltando = esperados.filter((e) => !presentes.has(`${e.semanaModelo}|${e.tipo}`));
 
-    let diasModeloResp = resp.diasModelo ?? [];
+    let slotsAchatados = bancosResp.flatMap((b) => (b.slots ?? []).map((s) => ({ semanaModelo: b.semanaModelo, ...s })));
     if (faltando.length) {
       console.warn(
-        `Plano alimentar (job ${jobId}): IA pulou ${faltando.length} dia(s) na 1ª resposta (${faltando.map((f) => `${f.diaSemana}/${f.semanaModelo}`).join(', ')}) — pedindo complemento.`,
+        `Plano alimentar (job ${jobId}): IA pulou ${faltando.length} banco(s) de refeição na 1ª resposta (${faltando.map((f) => `${ROTULOS_REFEICAO_PLANO[f.tipo] ?? f.tipo}/${f.semanaModelo}`).join(', ')}) — pedindo complemento.`,
       );
-      const complemento = await completarDiasFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao, rotulosRefeicao });
-      diasModeloResp = [...diasModeloResp, ...complemento];
+      const complemento = await completarSlotsFaltantes(faltando, { perfil, observacoes, metasPorDiaSemana, tiposRefeicao: tiposValidos });
+      slotsAchatados = [...slotsAchatados, ...complemento];
     }
 
-    // Receitas primeiro, pra poder resolver receitaNome -> receitaId dos itens (casamento por
-    // nome normalizado — a IA não é confiável pra manter ids consistentes num JSON grande).
-    const receitas = resp.receitas.map((r) => ({ id: uid(), nome: r.nome, tempoPreparoMin: r.tempoPreparoMin, ingredientes: r.ingredientes, modoPreparo: r.modoPreparo }));
-    const receitaIdPorNome = new Map(receitas.map((r) => [normalizarNomeItem(r.nome), r.id]));
-
-    const diasModelo = diasModeloResp.map((d) => {
-      const metaInfo = (metasPorDiaSemana ?? []).find((m) => m.diaSemana === d.diaSemana);
-      return {
-        id: uid(),
-        semanaModelo: d.semanaModelo,
-        diaSemana: d.diaSemana,
-        metaDia: metaInfo?.meta ?? null,
-        treinoNesteDia: metaInfo?.treinoNesteDia ?? false,
-        refeicoes: d.refeicoes.map((r) => ({
-          id: uid(),
-          tipo: r.tipo,
-          nomeSugerido: r.nomeSugerido,
-          horarioSugerido: r.horarioSugerido || undefined,
-          observacao: r.observacao || undefined,
-          itens: r.itens.map((i) => ({
-            id: uid(),
-            nome: i.nome,
-            quantidade: i.quantidade,
-            unidade: i.unidade,
-            calorias: i.calorias,
-            proteinas_g: i.proteinas_g,
-            carboidratos_g: i.carboidratos_g,
-            gorduras_g: i.gorduras_g,
-            receitaId: i.receitaNome ? receitaIdPorNome.get(normalizarNomeItem(i.receitaNome)) : undefined,
-          })),
+    // Monta os bancos finais (com ids) a partir dos slots achatados — os macros de cada opção são
+    // a soma determinística dos itens (mais confiável que confiar num total pronto da IA).
+    const bancos = modelosEsperados.map((sm) => ({
+      semanaModelo: sm,
+      slots: slotsAchatados
+        .filter((s) => s.semanaModelo === sm)
+        .map((s) => ({
+          tipo: s.tipo,
+          horarioSugerido: s.horarioSugerido || undefined,
+          objetivoNutricional: s.objetivoNutricional || undefined,
+          opcoes: (s.opcoes ?? []).map((o) => {
+            const itens = (o.itens ?? []).map((i) => ({
+              id: uid(),
+              nome: i.nome,
+              quantidade: i.quantidade,
+              unidade: i.unidade,
+              calorias: i.calorias,
+              proteinas_g: i.proteinas_g,
+              carboidratos_g: i.carboidratos_g,
+              gorduras_g: i.gorduras_g,
+            }));
+            return {
+              id: uid(),
+              nomeSugerido: o.nomeSugerido,
+              itens,
+              modoPreparo: o.modoPreparo?.length ? o.modoPreparo : undefined,
+              tempoPreparoMin: o.tempoPreparoMin || undefined,
+              rendimento: o.rendimento || undefined,
+              dificuldade: o.dificuldade || undefined,
+              armazenamento: o.armazenamento || undefined,
+              congelamento: o.congelamento || undefined,
+              reaquecimento: o.reaquecimento || undefined,
+              substituicoes: o.substituicoes || undefined,
+              observacao: o.observacao || undefined,
+              calorias: somaCampo(itens, 'calorias'),
+              proteinas_g: somaCampo(itens, 'proteinas_g'),
+              carboidratos_g: somaCampo(itens, 'carboidratos_g'),
+              gorduras_g: somaCampo(itens, 'gorduras_g'),
+              fibras_g: o.fibras_g ?? 0,
+              sodio_mg: o.sodio_mg ?? undefined,
+            };
+          }),
         })),
-      };
-    });
+    }));
+
+    // diasModelo não vem mais da IA — é 100% determinável a partir de metasPorDiaSemana (que o
+    // app já calcula), já que os dias não carregam conteúdo próprio nesta arquitetura.
+    const diasModelo = modelosEsperados.flatMap((sm) =>
+      DIAS_SEMANA.map((dia) => {
+        const metaInfo = (metasPorDiaSemana ?? []).find((m) => m.diaSemana === dia);
+        return { id: uid(), semanaModelo: sm, diaSemana: dia, metaDia: metaInfo?.meta ?? null, treinoNesteDia: metaInfo?.treinoNesteDia ?? false };
+      }),
+    );
 
     const novo = {
       id: uid(),
       nome: resp.nome,
-      semanas: resp.semanas ?? semanas,
-      tiposRefeicaoIncluidos: tiposRefeicao,
+      semanas,
+      tiposRefeicaoIncluidos: tiposValidos,
       avaliacaoInicial: resp.avaliacaoInicial,
       estrategia: resp.estrategia,
+      bancos,
       diasModelo,
-      receitas,
-      listaCompras: construirListaComprasServer(diasModeloResp, resp.semanas ?? semanas).map((i) => ({ id: uid(), ...i })),
+      planejamentoPreparoSemanal: resp.planejamentoPreparoSemanal || undefined,
+      listaCompras: construirListaComprasServer(bancos, repeticoesA, repeticoesB).map((i) => ({ id: uid(), ...i })),
       recomendacoesGerais: resp.recomendacoesGerais,
       criadoEm: new Date().toISOString(),
     };

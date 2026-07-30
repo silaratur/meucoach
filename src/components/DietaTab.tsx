@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { DadosPerfil, ItemRefeicao, Perfil, ReceitaPlano, RefeicaoPlano, TipoRefeicao } from '../types';
+import type { DadosPerfil, ItemListaCompras, OpcaoRefeicao, Perfil, TipoRefeicao } from '../types';
 import { DIAS_SEMANA, TIPOS_REFEICAO } from '../types';
 import { uid, hojeISO, horaAgora } from '../storage';
 import { diaSemanaHoje, metaDiaria } from '../calc';
 import { gerarPlanoAlimentar, type MetaPorDiaSemana } from '../api';
 import { acompanharJobIA } from '../jobs';
 import { IconeConcluido, IconeExcluir, IconeMusculacao, IconeSono, ICONE_REFEICAO } from './Icones';
-import { ChefHat, ShoppingBasket, CalendarDays, TrendingUp, Info } from 'lucide-react';
+import { ChefHat, ShoppingBasket, CalendarDays, TrendingUp, Info, ClipboardList } from 'lucide-react';
 import Markdown from './Markdown';
 
 interface Props {
@@ -19,15 +19,24 @@ interface Props {
 const REFEICOES_SELECIONAVEIS = TIPOS_REFEICAO.filter((t) => t.value !== 'suplemento');
 const PADRAO_SELECIONADO: TipoRefeicao[] = ['cafe', 'almoco', 'jantar'];
 
-function somaItens(itens: ItemRefeicao[], campo: 'calorias' | 'proteinas_g' | 'carboidratos_g' | 'gorduras_g'): number {
-  return itens.reduce((acc, i) => acc + i[campo], 0);
-}
-
 function textoRepeticao(semanas: number): string {
   if (semanas === 1) return 'A mesma semana-modelo se repete durante o período todo.';
-  if (semanas === 2) return 'Semana 1 = Cardápio A · Semana 2 = Cardápio B.';
-  if (semanas === 3) return 'Semanas 1 e 3 = Cardápio A · Semana 2 = Cardápio B.';
-  return 'Semanas 1 e 3 = Cardápio A · Semanas 2 e 4 = Cardápio B.';
+  if (semanas === 2) return 'Semana 1 = Banco A · Semana 2 = Banco B.';
+  if (semanas === 3) return 'Semanas 1 e 3 = Banco A · Semana 2 = Banco B.';
+  return 'Semanas 1 e 3 = Banco A · Semanas 2 e 4 = Banco B.';
+}
+
+// Agrupa mantendo a ordem em que as categorias aparecem (a lista já vem ordenada por categoria
+// do servidor, então a primeira aparição de cada uma já define a ordem final de exibição).
+function agruparPorCategoria(itens: ItemListaCompras[]): [string, ItemListaCompras[]][] {
+  const grupos = new Map<string, ItemListaCompras[]>();
+  for (const item of itens) {
+    const categoria = item.categoria ?? 'Outros';
+    const lista = grupos.get(categoria);
+    if (lista) lista.push(item);
+    else grupos.set(categoria, [item]);
+  }
+  return [...grupos.entries()];
 }
 
 export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: Props) {
@@ -37,9 +46,12 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
   const [gerando, setGerando] = useState(false);
   const [erro, setErro] = useState('');
   const [mensagemFundo, setMensagemFundo] = useState('');
-  const [modo, setModo] = useState<'cardapio' | 'compras' | 'receitas'>('cardapio');
+  const [modo, setModo] = useState<'cardapio' | 'compras' | 'preparo'>('cardapio');
   const [semanaModeloVista, setSemanaModeloVista] = useState<'A' | 'B'>('A');
   const [diaVisto, setDiaVisto] = useState(diaSemanaHoje());
+  // Qual das ~5 opções está selecionada por (semana-modelo, tipo de refeição) — o aluno escolhe
+  // livremente entre a principal e as alternativas; sem seleção, usa a principal (índice 0).
+  const [opcaoSelecionada, setOpcaoSelecionada] = useState<Record<string, number>>({});
 
   const plano = dados.planosAlimentares[0] ?? null;
 
@@ -64,7 +76,7 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
 
       // Plano alimentar demora — roda em background no servidor (sobrevive à tela bloqueada/app
       // em segundo plano) em vez de segurar essa chamada esperando a IA terminar. A montagem do
-      // plano (receitas, lista de compras, resolução de receitaId) agora acontece no servidor.
+      // plano (banco de receitas por refeição, lista de compras) acontece no servidor.
       const { jobId } = await gerarPlanoAlimentar(perfil, semanas, tiposSelecionados, metasPorDiaSemana, observacoes, sessoesRecentes, atividadeRecente);
       setGerando(false);
       setMensagemFundo('Gerando seu plano alimentar em segundo plano — pode sair da tela, eu aviso quando terminar.');
@@ -75,6 +87,7 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
           setModo('cardapio');
           setSemanaModeloVista('A');
           setDiaVisto(diaSemanaHoje());
+          setOpcaoSelecionada({});
           setMensagemFundo('');
         },
         (msg) => {
@@ -88,7 +101,7 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
     }
   }
 
-  function comiIsso(refeicao: RefeicaoPlano) {
+  function comiIsso(tipo: TipoRefeicao, opcao: OpcaoRefeicao) {
     const hoje = hojeISO();
     atualizar((d) => ({
       ...d,
@@ -100,13 +113,14 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
             ...(d.dias[hoje]?.registros ?? []),
             {
               id: uid(),
-              tipo: refeicao.tipo,
-              descricao: refeicao.nomeSugerido,
+              tipo,
+              descricao: opcao.nomeSugerido,
               hora: horaAgora(),
-              calorias: somaItens(refeicao.itens, 'calorias'),
-              proteinas_g: somaItens(refeicao.itens, 'proteinas_g'),
-              carboidratos_g: somaItens(refeicao.itens, 'carboidratos_g'),
-              gorduras_g: somaItens(refeicao.itens, 'gorduras_g'),
+              calorias: opcao.calorias,
+              proteinas_g: opcao.proteinas_g,
+              carboidratos_g: opcao.carboidratos_g,
+              gorduras_g: opcao.gorduras_g,
+              fibras_g: opcao.fibras_g,
             },
           ],
         },
@@ -116,20 +130,38 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
 
   const semanaModeloBExiste = plano?.diasModelo.some((d) => d.semanaModelo === 'B') ?? false;
   const diaAtual = plano?.diasModelo.find((d) => d.semanaModelo === semanaModeloVista && d.diaSemana === diaVisto) ?? null;
-  const totalDia = diaAtual
-    ? {
-        calorias: diaAtual.refeicoes.reduce((acc, r) => acc + somaItens(r.itens, 'calorias'), 0),
-        proteinas_g: diaAtual.refeicoes.reduce((acc, r) => acc + somaItens(r.itens, 'proteinas_g'), 0),
-        carboidratos_g: diaAtual.refeicoes.reduce((acc, r) => acc + somaItens(r.itens, 'carboidratos_g'), 0),
-        gorduras_g: diaAtual.refeicoes.reduce((acc, r) => acc + somaItens(r.itens, 'gorduras_g'), 0),
-      }
-    : null;
+  const bancoAtual = plano?.bancos.find((b) => b.semanaModelo === semanaModeloVista) ?? null;
+
+  function opcaoDoSlot(tipo: TipoRefeicao) {
+    const slot = bancoAtual?.slots.find((s) => s.tipo === tipo);
+    if (!slot || !slot.opcoes.length) return { slot: null, idx: 0, opcao: null };
+    const chave = `${semanaModeloVista}|${tipo}`;
+    const idx = Math.min(opcaoSelecionada[chave] ?? 0, slot.opcoes.length - 1);
+    return { slot, idx, opcao: slot.opcoes[idx] };
+  }
+
+  const totalDia =
+    diaAtual && plano
+      ? plano.tiposRefeicaoIncluidos.reduce(
+          (acc, tipo) => {
+            const { opcao } = opcaoDoSlot(tipo);
+            if (!opcao) return acc;
+            return {
+              calorias: acc.calorias + opcao.calorias,
+              proteinas_g: acc.proteinas_g + opcao.proteinas_g,
+              carboidratos_g: acc.carboidratos_g + opcao.carboidratos_g,
+              gorduras_g: acc.gorduras_g + opcao.gorduras_g,
+            };
+          },
+          { calorias: 0, proteinas_g: 0, carboidratos_g: 0, gorduras_g: 0 },
+        )
+      : null;
 
   return (
     <div>
       <div className="cartao">
         <h2><ChefHat size={19} /> Plano Alimentar com o Coach</h2>
-        <p className="meta-texto">Um nutrólogo virtual monta seu cardápio, lista de compras e receitas — integrado ao seu treino, sono e objetivo.</p>
+        <p className="meta-texto">Um nutrólogo virtual monta seu cardápio, lista de compras e meal prep — integrado ao seu treino, sono e objetivo.</p>
 
         <label>Duração do plano</label>
         <div className="chips-tipo">
@@ -189,8 +221,8 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
             <button className={`chip ${modo === 'compras' ? 'ativa' : ''}`} onClick={() => setModo('compras')}>
               <ShoppingBasket size={15} /> Lista de Compras
             </button>
-            <button className={`chip ${modo === 'receitas' ? 'ativa' : ''}`} onClick={() => setModo('receitas')}>
-              <ChefHat size={15} /> Receitas
+            <button className={`chip ${modo === 'preparo' ? 'ativa' : ''}`} onClick={() => setModo('preparo')}>
+              <ClipboardList size={15} /> Meal Prep
             </button>
           </div>
 
@@ -200,7 +232,7 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
                 <div className="pills-semana">
                   {(['A', 'B'] as const).map((s) => (
                     <button key={s} className={`pill-semana ${semanaModeloVista === s ? 'ativa' : ''}`} onClick={() => setSemanaModeloVista(s)}>
-                      Cardápio {s}
+                      Banco {s}
                     </button>
                   ))}
                 </div>
@@ -251,35 +283,79 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
                     </div>
                   )}
 
-                  {diaAtual.refeicoes.map((r) => {
-                    const Icone = ICONE_REFEICAO[r.tipo];
-                    const rotulo = TIPOS_REFEICAO.find((t) => t.value === r.tipo)?.label ?? r.tipo;
-                    const receitasDaRefeicao = [...new Set(r.itens.map((i) => i.receitaId).filter((x): x is string => !!x))]
-                      .map((id) => plano.receitas.find((rec) => rec.id === id))
-                      .filter((rec): rec is ReceitaPlano => !!rec);
+                  {plano.tiposRefeicaoIncluidos.map((tipo) => {
+                    const { slot, idx, opcao } = opcaoDoSlot(tipo);
+                    if (!slot || !opcao) return null;
+                    const Icone = ICONE_REFEICAO[tipo];
+                    const rotulo = TIPOS_REFEICAO.find((t) => t.value === tipo)?.label ?? tipo;
+                    const chave = `${semanaModeloVista}|${tipo}`;
+                    const temPreparo = !!(
+                      opcao.modoPreparo?.length ||
+                      opcao.tempoPreparoMin ||
+                      opcao.rendimento ||
+                      opcao.dificuldade ||
+                      opcao.armazenamento ||
+                      opcao.congelamento ||
+                      opcao.reaquecimento ||
+                      opcao.substituicoes
+                    );
                     return (
-                      <div key={r.id} className="dia-corrida">
+                      <div key={tipo} className="refeicao-banco-cartao">
                         <p className="detalhes-dia">
-                          <Icone size={14} /> <strong>{rotulo}{r.horarioSugerido ? ` · ${r.horarioSugerido}` : ''}</strong>
+                          <Icone size={14} /> <strong>{rotulo}{slot.horarioSugerido ? ` · ${slot.horarioSugerido}` : ''}</strong>
                         </p>
-                        <p className="detalhes-dia"><strong>{r.nomeSugerido}</strong></p>
-                        {r.observacao && <p className="sugestao-motivo"><Markdown texto={r.observacao} inline /></p>}
-                        {r.itens.map((item) => (
+                        {slot.objetivoNutricional && <p className="meta-texto">{slot.objetivoNutricional}</p>}
+
+                        {slot.opcoes.length > 1 && (
+                          <div className="chips-tipo opcoes-refeicao">
+                            {slot.opcoes.map((_, i) => (
+                              <button
+                                key={i}
+                                className={`chip mini ${idx === i ? 'ativa' : ''}`}
+                                onClick={() => setOpcaoSelecionada((s) => ({ ...s, [chave]: i }))}
+                              >
+                                {i === 0 ? 'Principal' : `Opção ${i + 1}`}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <p className="detalhes-dia"><strong>{opcao.nomeSugerido}</strong></p>
+                        {opcao.observacao && <p className="sugestao-motivo"><Markdown texto={opcao.observacao} inline /></p>}
+                        {opcao.itens.map((item) => (
                           <p key={item.id} className="item-refeicao-linha">
                             <span>{item.nome} — {item.quantidade} {item.unidade}</span>
                             <span>{Math.round(item.calorias)} kcal</span>
                           </p>
                         ))}
-                        {receitasDaRefeicao.map((rec) => (
-                          <details key={rec.id} className="sugestao">
-                            <summary><strong>Ver receita: {rec.nome}</strong> <small>~{rec.tempoPreparoMin} min</small></summary>
-                            <p><strong>Ingredientes:</strong> {rec.ingredientes.map((i) => `${i.nome} (${i.quantidade} ${i.unidade})`).join(', ')}</p>
-                            <ol className="lista-compacta-exercicios">
-                              {rec.modoPreparo.map((passo, i) => <li key={i}>{passo}</li>)}
-                            </ol>
+                        <p className="meta-texto">
+                          {Math.round(opcao.calorias)} kcal · P {Math.round(opcao.proteinas_g)}g · C {Math.round(opcao.carboidratos_g)}g · G {Math.round(opcao.gorduras_g)}g
+                          {' '}· Fibras {Math.round(opcao.fibras_g)}g{typeof opcao.sodio_mg === 'number' ? ` · Sódio ${Math.round(opcao.sodio_mg)}mg` : ''}
+                        </p>
+
+                        {temPreparo && (
+                          <details className="sugestao">
+                            <summary><strong>Ver preparo</strong>{opcao.tempoPreparoMin ? <small> · ~{opcao.tempoPreparoMin} min</small> : null}</summary>
+                            {(opcao.rendimento || opcao.dificuldade) && (
+                              <p className="meta-texto">
+                                {opcao.rendimento ? `Rendimento: ${opcao.rendimento}` : ''}
+                                {opcao.rendimento && opcao.dificuldade ? ' · ' : ''}
+                                {opcao.dificuldade ? `Dificuldade: ${opcao.dificuldade}` : ''}
+                              </p>
+                            )}
+                            {!!opcao.modoPreparo?.length && (
+                              <ol className="lista-compacta-exercicios">
+                                {opcao.modoPreparo.map((passo, i) => <li key={i}>{passo}</li>)}
+                              </ol>
+                            )}
+                            {opcao.substituicoes && <p className="meta-texto"><strong>Substituições:</strong> {opcao.substituicoes}</p>}
+                            {opcao.armazenamento && <p className="meta-texto"><strong>Armazenamento:</strong> {opcao.armazenamento}</p>}
+                            {opcao.congelamento && <p className="meta-texto"><strong>Congelamento:</strong> {opcao.congelamento}</p>}
+                            {opcao.reaquecimento && <p className="meta-texto"><strong>Reaquecimento:</strong> {opcao.reaquecimento}</p>}
                           </details>
-                        ))}
-                        <button className="mini" onClick={() => comiIsso(r)}><IconeConcluido size={13} /> Comi isso</button>
+                        )}
+
+                        <button className="mini" onClick={() => comiIsso(tipo, opcao)}><IconeConcluido size={13} /> Comi isso</button>
                       </div>
                     );
                   })}
@@ -292,30 +368,26 @@ export default function DietaTab({ perfil, dados, atualizar, recarregarDados }: 
             <>
               <div className="resumo-lista-compras">
                 <span className="resumo-lista-compras-num">{plano.listaCompras.length}</span>
-                <span className="meta-texto">itens · quantidade total pro período inteiro, já somando as repetições das semanas-modelo</span>
+                <span className="meta-texto">itens · quantidade total pro período inteiro (receita principal de cada refeição, já somando as repetições das semanas-modelo)</span>
               </div>
-              {plano.listaCompras.map((i) => (
-                <p key={i.id} className="lista-compras-item">
-                  <span>{i.nome}</span>
-                  <span>{i.quantidadeTotal} {i.unidade}</span>
-                </p>
+              {agruparPorCategoria(plano.listaCompras).map(([categoria, itens]) => (
+                <div key={categoria} className="grupo-categoria-compras">
+                  <h3 className="rotulo-secao-compras">{categoria}</h3>
+                  {itens.map((i) => (
+                    <p key={i.id} className="lista-compras-item">
+                      <span>{i.nome}</span>
+                      <span>{i.quantidadeTotal} {i.unidade}</span>
+                    </p>
+                  ))}
+                </div>
               ))}
             </>
           )}
 
-          {modo === 'receitas' && (
-            <>
-              {plano.receitas.length === 0 && <p className="meta-texto">Nenhuma receita necessária — todas as refeições deste plano são simples de montar.</p>}
-              {plano.receitas.map((rec) => (
-                <details key={rec.id} className="sugestao">
-                  <summary><strong>{rec.nome}</strong> <small>~{rec.tempoPreparoMin} min</small></summary>
-                  <p><strong>Ingredientes:</strong> {rec.ingredientes.map((i) => `${i.nome} (${i.quantidade} ${i.unidade})`).join(', ')}</p>
-                  <ol className="lista-compacta-exercicios">
-                    {rec.modoPreparo.map((passo, i) => <li key={i}>{passo}</li>)}
-                  </ol>
-                </details>
-              ))}
-            </>
+          {modo === 'preparo' && (
+            plano.planejamentoPreparoSemanal
+              ? <Markdown texto={plano.planejamentoPreparoSemanal} />
+              : <p className="meta-texto">Este plano não trouxe um planejamento de preparo semanal.</p>
           )}
 
           {plano.recomendacoesGerais && (

@@ -71,6 +71,9 @@ export interface Perfil {
   preferencias?: string;
   geladeira?: string;
   suplementos?: string;
+  orcamentoAlimentar?: string; // ex.: "apertado", "moderado", "sem restrição de custo"
+  equipamentosCozinha?: string; // ex.: "só fogão e panela", "tenho airfryer e forno"
+  tempoParaCozinhar?: string; // ex.: "até 20 min por refeição", "só consigo cozinhar no fim de semana"
   descansoPadraoSeg: number;
   // avaliação do aluno (anamnese de treino)
   nivelExperiencia?: NivelExperiencia;
@@ -296,33 +299,56 @@ export interface ItemRefeicao {
   proteinas_g: number;
   carboidratos_g: number;
   gorduras_g: number;
-  receitaId?: string; // só quando o item exige preparo com passos (referencia ReceitaPlano.id)
 }
 
-export interface RefeicaoPlano {
+// Uma das (normalmente 5) opções de uma refeição — carrega o preparo completo direto nela (não
+// mais uma referência solta a uma lista de receitas separada, que dependia de casar nome com a
+// IA e falhava às vezes). opcoes[0] de cada slot é a "receita principal" (usada na lista de
+// compras e como sugestão padrão); as demais são alternativas pra variar sem perder o alinhamento
+// nutricional — a variedade real deve vir de proteína/vegetal/modo de preparo diferentes, não só
+// do nome.
+export interface OpcaoRefeicao {
   id: string;
-  tipo: TipoRefeicao; // nunca 'suplemento' aqui
   nomeSugerido: string;
-  horarioSugerido?: string; // "HH:mm"
-  observacao?: string;
   itens: ItemRefeicao[];
+  modoPreparo?: string[]; // passos numerados; vazio/ausente quando não exige preparo real (ex.: "1 banana")
+  tempoPreparoMin?: number;
+  rendimento?: string; // ex.: "2 porções"
+  dificuldade?: 'fácil' | 'médio' | 'difícil';
+  armazenamento?: string; // validade na geladeira
+  congelamento?: string; // pode congelar? por quanto tempo? ("" quando não se aplica)
+  reaquecimento?: string;
+  substituicoes?: string; // trocas equivalentes pros principais ingredientes
+  observacao?: string; // nota curta opcional (ex.: papel pré/pós-treino)
+  calorias: number;
+  proteinas_g: number;
+  carboidratos_g: number;
+  gorduras_g: number;
+  fibras_g: number;
+  sodio_mg?: number;
+}
+
+// Banco de opções de UM tipo de refeição (ex.: almoço) pra UMA semana-modelo — compartilhado por
+// todos os dias daquela semana-modelo, em vez de cada dia ter seu próprio conjunto exclusivo
+// (senão o volume total do plano explode com o número de dias, sem ganho real de variedade).
+export interface SlotRefeicaoAlimentar {
+  tipo: TipoRefeicao; // nunca 'suplemento' aqui
+  horarioSugerido?: string; // "HH:mm"
+  objetivoNutricional?: string; // ex.: "alto em proteína, leve, rápido de preparar de manhã"
+  opcoes: OpcaoRefeicao[]; // ~5
+}
+
+export interface BancoRefeicoesSemana {
+  semanaModelo: 'A' | 'B';
+  slots: SlotRefeicaoAlimentar[]; // um por tipo de refeição incluído no plano
 }
 
 export interface DiaModeloAlimentar {
   id: string;
   semanaModelo: 'A' | 'B'; // só existe 'B' quando o plano usa 2 semanas-modelo (2-4 semanas)
   diaSemana: string; // um de DIAS_SEMANA
-  metaDia: MetaDiaAlimentar | null; // calculada client-side via metaDiaria(), não pela IA
+  metaDia: MetaDiaAlimentar | null; // calculada server-side via metaDiaria(), não pela IA
   treinoNesteDia: boolean;
-  refeicoes: RefeicaoPlano[];
-}
-
-export interface ReceitaPlano {
-  id: string;
-  nome: string;
-  tempoPreparoMin: number;
-  ingredientes: { nome: string; quantidade: number; unidade: string }[];
-  modoPreparo: string[]; // passos numerados
 }
 
 // Preço não entra aqui de propósito: a IA não tem acesso a preços reais de mercado, e uma
@@ -333,6 +359,7 @@ export interface ItemListaCompras {
   nome: string;
   quantidadeTotal: number;
   unidade: string;
+  categoria?: string; // ex.: "Proteínas", "Hortifrúti", "Laticínios", "Grãos e cereais", "Temperos", "Bebidas", "Outros"
 }
 
 export interface PlanoAlimentar {
@@ -342,9 +369,10 @@ export interface PlanoAlimentar {
   tiposRefeicaoIncluidos: TipoRefeicao[];
   avaliacaoInicial: string; // markdown
   estrategia: string; // markdown
-  diasModelo: DiaModeloAlimentar[]; // 7 itens (só template A) ou 14 (A+B)
-  receitas: ReceitaPlano[]; // de-duplicadas
-  listaCompras: ItemListaCompras[]; // já agregada para TODO o período do plano
+  bancos: BancoRefeicoesSemana[]; // 1 item (só "A") ou 2 (A+B)
+  diasModelo: DiaModeloAlimentar[]; // 7 itens (só template A) ou 14 (A+B) — só metas, sem conteúdo de refeição
+  planejamentoPreparoSemanal?: string; // markdown — ordem de preparo, o que congelar, como economizar tempo
+  listaCompras: ItemListaCompras[]; // agregada a partir da opção PRINCIPAL de cada slot, para TODO o período do plano
   recomendacoesGerais?: string; // markdown
   criadoEm: string;
 }

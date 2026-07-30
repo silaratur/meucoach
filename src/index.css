@@ -1322,3 +1322,27 @@ button.destaque.grande { font-size: 1rem; padding: 12px; width: 100%; margin: 8p
 .resumo-lista-compras { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
 .resumo-lista-compras-num { font-size: 1.8rem; font-weight: 700; color: var(--verde); line-height: 1; }
 .resumo-lista-compras .meta-texto { margin: 0; }
+
+/* Cada tipo de refeição do banco (café, almoço...) vira uma caixa própria — mesmo padrão visual
+   dos outros cartões, com o seletor das ~5 opções no topo e o preparo completo dentro de um
+   <details> pra não sobrecarregar a tela com passo a passo de tudo de uma vez. */
+.refeicao-banco-cartao {
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.refeicao-banco-cartao .detalhes-dia:first-child { margin-top: 0; }
+.opcoes-refeicao { margin: 6px 0; gap: 6px; }
+.opcoes-refeicao .chip.mini { padding: 4px 10px; font-size: 0.78rem; }
+
+.grupo-categoria-compras { margin-top: 10px; }
+.rotulo-secao-compras {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--texto-suave);
+  margin: 0 0 2px;
+}
