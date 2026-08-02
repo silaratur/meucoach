@@ -514,6 +514,39 @@ button:disabled { opacity: 0.6; }
   padding: 8px 12px;
   font-size: 0.9rem;
 }
+/* Atalho rápido de percepção de esforço — mesmo dado do badge RIR da tabela (rirAtual), só que
+   com 3 toques grandes em vez de ciclar um número; ideia trazida de um app concorrente que o
+   dono avaliou (lá é logo abaixo de reps/carga, aqui fica logo abaixo da recomendação de carga). */
+.percepcao-rapida { margin: 10px 0; }
+.percepcao-rotulo { display: block; font-size: 0.82rem; color: var(--texto-suave); margin-bottom: 6px; }
+.percepcao-botoes { display: flex; gap: 6px; }
+.percepcao-botao {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  font-size: 0.78rem;
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  color: var(--texto);
+}
+.percepcao-botao.ativa { background: var(--verde); color: var(--ink); border-color: var(--verde-escuro); }
+/* Resumo pré-treino (duração/calorias/exercícios), mesmo grid usado na Evolução — trio inspirado
+   no app concorrente que o dono avaliou. */
+.resumo-pre-treino { margin: 12px 0; }
+.popup-carga-estatica .instrucao { text-align: left; }
+.linha-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  margin: 10px 0;
+  text-align: left;
+}
+.linha-checkbox input { width: auto; margin: 0; }
 .centro { text-align: center; }
 .centro .linha { text-align: left; }
 .timer {
@@ -957,6 +990,19 @@ button.destaque {
   color: var(--texto-suave);
 }
 .carrossel-item.ativo .carrossel-item-icone { border-color: var(--verde); color: var(--texto); }
+/* Foto/vídeo real do exercício (quando o aluno já anexou uma demonstração) no lugar do ícone
+   genérico — reconhecimento visual mais rápido, mesmo espaço/bordas do ícone pra não pular o
+   layout dependendo de qual exercício tem mídia e qual não tem. */
+.carrossel-item-foto {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  border: 2px solid var(--borda);
+  object-fit: cover;
+  display: block;
+}
+.carrossel-item.visualizando .carrossel-item-foto { border-color: var(--tom-info-texto); }
+.carrossel-item.ativo .carrossel-item-foto { border-color: var(--verde); }
 .carrossel-check {
   position: absolute;
   top: -4px;
@@ -1062,15 +1108,17 @@ button.destaque {
 @media (prefers-reduced-motion: reduce) {
   .popup-analise-icone { animation: none; }
 }
-.popup-fechar {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 4px;
-  border-radius: 50%;
-  line-height: 0;
-  background: var(--superficie);
-  border-color: var(--borda);
+/* "Pular descanso" — largura total e cor própria (mesma família do .badge-superset, já usada
+   pra metadado estrutural do treino), pra ser fácil de achar sem competir com o CTA verde
+   principal. Substituiu o X pequeno no canto, pouco descobrível (feedback direto do dono depois
+   de comparar com um app concorrente). */
+.pular-descanso {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--tom-especial-bg);
+  border-color: var(--tom-especial-borda);
+  color: var(--tom-especial-texto);
+  font-weight: 600;
 }
 .badge-recorde {
   display: inline-block;

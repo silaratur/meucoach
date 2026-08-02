@@ -1,5 +1,5 @@
 // Cálculos de saúde: idade, gasto calórico e metas diárias.
-import type { AtividadeDiaria, Perfil, Registro, SerieFeita, SessaoTreino } from './types';
+import type { AtividadeDiaria, Exercicio, Perfil, Registro, SerieFeita, SessaoTreino } from './types';
 import { DIAS_SEMANA } from './types';
 
 // Nome do dia da semana de hoje, no mesmo formato de DIAS_SEMANA (ex.: "Segunda").
@@ -173,6 +173,30 @@ export function totaisDoDia(registros: Registro[]): TotaisDia {
 // Link de demonstração em vídeo para um exercício (busca no YouTube).
 export function linkVideoExercicio(nome: string): string {
   return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(`como fazer ${nome} execução correta forma`);
+}
+
+// Estimativa de duração antes de começar o treino — soma um tempo fixo de execução por série
+// (~40s) ao descanso configurado de cada exercício. Não é medição real (isso já existe via
+// tempoTotalSeg no WorkoutPlayer), é só pra dar uma expectativa de "quanto tempo isso vai levar"
+// antes de apertar Começar, como o resumo do dia de plano de 4 semanas (tempoEstimadoMin) já faz.
+export function estimarDuracaoTreinoMin(exercicios: Exercicio[], aquecimentoMin?: number): number {
+  const TEMPO_SERIE_SEG = 40;
+  const segTotal = exercicios.reduce((acc, ex) => acc + ex.series * (TEMPO_SERIE_SEG + (ex.descansoSeg || 60)), 0);
+  return Math.max(5, Math.round(segTotal / 60) + (aquecimentoMin ?? 0));
+}
+
+// Faixa de calorias estimadas pela sessão via MET (musculação geral 4-6.5, mais intensa quando
+// tem bi-set/tri-set no treino — menos descanso, mais gasto por minuto). É uma estimativa de
+// referência (mesmo princípio usado por relógios/apps de treino), não calorimetria real.
+export function faixaCaloriasTreino(pesoKg: number | undefined, duracaoMin: number, temSuperset: boolean): { min: number; max: number } | null {
+  if (!pesoKg || pesoKg <= 0 || duracaoMin <= 0) return null;
+  const metMin = temSuperset ? 5 : 4;
+  const metMax = temSuperset ? 8 : 6.5;
+  const kcalPorMinuto = (met: number) => (met * 3.5 * pesoKg) / 200;
+  return {
+    min: Math.round(kcalPorMinuto(metMin) * duracaoMin),
+    max: Math.round(kcalPorMinuto(metMax) * duracaoMin),
+  };
 }
 
 // Categoria de equipamento inferida pelo nome do exercício — não há campo estruturado de

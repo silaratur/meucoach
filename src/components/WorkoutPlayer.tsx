@@ -14,8 +14,9 @@ import {
   vozDisponivel,
   type EstadoSerie,
 } from '../speech';
-import { tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
+import { estimarDuracaoTreinoMin, faixaCaloriasTreino, tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
 import { trocarExercicio } from '../api';
+import { urlMidia } from '../media';
 import { MediaGallery } from './Midia';
 import {
   IconeComecar,
@@ -34,6 +35,35 @@ import {
   ICONE_EQUIPAMENTO,
 } from './Icones';
 import { Trophy, Volume2, VolumeX, Rocket, Wind, Smile, ThumbsUp, PersonStanding, Clapperboard, PartyPopper, Flame, X, ArrowLeft } from 'lucide-react';
+
+// Thumbnail de um item do carrossel: usa a primeira foto/vídeo anexado ao exercício (quando o
+// aluno já registrou uma demonstração) como imagem real, no lugar do ícone genérico de
+// equipamento — reconhecimento visual mais rápido, como o app concorrente mostrado pelo dono.
+// Sem mídia própria, cai de volta pro ícone (a maioria dos exercícios gerados por IA não tem
+// foto ainda, então o fallback é o caminho comum, não uma exceção).
+function MiniThumbnailExercicio({ exercicio }: { exercicio: Exercicio }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const midia = exercicio.midias?.find((m) => m.tipo === 'foto' || m.tipo === 'video');
+
+  useEffect(() => {
+    let ativo = true;
+    setUrl(null);
+    if (midia) urlMidia(midia.id).then((u) => ativo && setUrl(u));
+    return () => {
+      ativo = false;
+    };
+  }, [midia?.id]);
+
+  if (midia && url) {
+    return <img className="carrossel-item-foto" src={url} alt="" />;
+  }
+  const Icone = ICONE_EQUIPAMENTO[tipoEquipamento(exercicio.nome)];
+  return (
+    <div className="carrossel-item-icone">
+      <Icone size={22} />
+    </div>
+  );
+}
 
 // Carrossel horizontal com todos os exercícios do treino — destaca o atual e marca os já
 // concluídos (todas as rodadas feitas), pra dar visão do treino inteiro, não só da estação atual.
@@ -55,7 +85,6 @@ function CarrosselExercicios({
   return (
     <div className="carrossel-exercicios rolagem-suave">
       {exercicios.map((ex) => {
-        const Icone = ICONE_EQUIPAMENTO[tipoEquipamento(ex.nome)];
         const visualizando = ex.id === (peekId ?? atualId);
         return (
           <button
@@ -65,7 +94,7 @@ function CarrosselExercicios({
             title={ex.nome}
             onClick={() => aoSelecionar(ex.id)}
           >
-            <div className="carrossel-item-icone"><Icone size={22} /></div>
+            <MiniThumbnailExercicio exercicio={ex} />
             <span className="carrossel-item-nome">{ex.nome}</span>
             {feito(ex) && <span className="carrossel-check"><IconeConcluido size={14} /></span>}
           </button>
@@ -183,6 +212,10 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   // andamento — puramente de leitura: não mexe em blocoIdx/estacaoIdx/rodada nem no cronômetro de
   // descanso, que continuam rodando por baixo (o popup de descanso fica fora deste "modo peek").
   const [idPeek, setIdPeek] = useState<string | null>(null);
+  // Modal educativo de calibração de carga — mostrado uma vez antes do 1º exercício (a menos que
+  // o aluno já tenha marcado "não mostrar novamente" numa sessão anterior, guardado local).
+  const [mostrarDicaCarga, setMostrarDicaCarga] = useState(false);
+  const [naoMostrarDicaCargaDeNovo, setNaoMostrarDicaCargaDeNovo] = useState(false);
 
   const inicioRef = useRef(Date.now());
   const timerRef = useRef<number | null>(null);
@@ -355,6 +388,24 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     if (!emSegundos && ultima.reps != null && ultima.reps < alvo - 1) return 'fadiga';
     if (ultima.rir != null && ultima.rir >= 4) return 'performance';
     return 'normal';
+  }
+
+  const CHAVE_DICA_CARGA = 'mc:dicaCargaVista';
+
+  // Botão "Começar" real do usuário: intercepta pra mostrar a dica de calibração de carga uma
+  // única vez (por aparelho) antes do primeiro treino — só depois disso chama comecar().
+  function aoClicarComecar() {
+    if (localStorage.getItem(CHAVE_DICA_CARGA) === '1') {
+      comecar();
+    } else {
+      setMostrarDicaCarga(true);
+    }
+  }
+
+  function confirmarDicaCarga() {
+    if (naoMostrarDicaCargaDeNovo) localStorage.setItem(CHAVE_DICA_CARGA, '1');
+    setMostrarDicaCarga(false);
+    comecar();
   }
 
   // ---------- Início: aquecimento (se houver) ou direto pro primeiro bloco ----------
@@ -754,6 +805,13 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const minutos = String(Math.floor(restante / 60)).padStart(1, '0');
   const segundos = String(restante % 60).padStart(2, '0');
 
+  // Resumo pré-treino (duração/calorias/exercícios) — mesmo trio que o dono viu no app
+  // concorrente, calculado localmente já que o treino solto (fora de um plano de 4 semanas) não
+  // vem com uma duração estimada da IA.
+  const duracaoEstimadaMin = estimarDuracaoTreinoMin(exerciciosState, treino.aquecimentoMin);
+  const temSuperset = exerciciosState.some((e) => e.grupoId);
+  const faixaCalorias = faixaCaloriasTreino(perfil.pesoKg, duracaoEstimadaMin, temSuperset);
+
   return (
     <div className="player">
       <div className="cartao">
@@ -782,7 +840,27 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
         {recorde && <div className="banner-recorde"><Trophy size={15} /> {recorde}</div>}
 
-        {fase === 'pronto' && (
+        {fase === 'pronto' && mostrarDicaCarga && (
+          <div className="popup-descanso popup-carga-estatica">
+            <p className="rotulo-descanso"><IconeMusculacao size={15} /> Como calibrar a carga</p>
+            <p className="instrucao">
+              A carga certa é a que te deixa completar todas as repetições avaliando a série como <strong>Na medida</strong> ou{' '}
+              <strong>Difícil</strong>. Se sobrar fôlego demais (sempre "Fácil"), aumente o peso na próxima série; se não conseguir
+              terminar, diminua — é assim que você calibra na prática, não tem fórmula mágica.
+            </p>
+            <label className="linha-checkbox">
+              <input
+                type="checkbox"
+                checked={naoMostrarDicaCargaDeNovo}
+                onChange={(e) => setNaoMostrarDicaCargaDeNovo(e.target.checked)}
+              />
+              Não mostrar novamente
+            </label>
+            <button className="primario grande" onClick={confirmarDicaCarga}>Entendi</button>
+          </div>
+        )}
+
+        {fase === 'pronto' && !mostrarDicaCarga && (
           <div className="centro">
             <p>
               {exerciciosState.length} {exerciciosState.length === 1 ? 'exercício' : 'exercícios'} te esperando
@@ -796,7 +874,12 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
                 </>
               )}
             </p>
-            <button className="primario grande" onClick={comecar}><Rocket size={17} /> Começar</button>
+            <div className="grade-metricas resumo-pre-treino">
+              <div><small>Duração estimada</small><strong>~{duracaoEstimadaMin} min</strong></div>
+              {faixaCalorias && <div><small>Calorias</small><strong>{faixaCalorias.min}-{faixaCalorias.max}</strong></div>}
+              <div><small>Exercícios</small><strong>{exerciciosState.length}</strong></div>
+            </div>
+            <button className="primario grande" onClick={aoClicarComecar}><Rocket size={17} /> Começar</button>
             <button onClick={aoCancelar}>Voltar</button>
           </div>
         )}
@@ -879,6 +962,26 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
               <IconeMusculacao size={14} /> {recomendacao.cargaKg ? `Carga recomendada: ${recomendacao.cargaKg} kg — ` : ''}{recomendacao.motivo}
             </p>
 
+            {/* Atalho rápido pra RIR: 3 toques em vez de ciclar o badge numérico 5 vezes — o
+                mesmo dado (rirAtual) já alimenta estimarEstadoSerie/incentivoContextual, então
+                usar isso ou o badge da tabela dá no mesmo, só muda a velocidade de registrar. */}
+            {emEstadoPronto && (
+              <div className="percepcao-rapida">
+                <span className="percepcao-rotulo">Como está indo essa série?</span>
+                <div className="percepcao-botoes">
+                  <button type="button" className={`percepcao-botao ${rirAtual >= 3 ? 'ativa' : ''}`} onClick={() => setRirAtual(4)}>
+                    <Smile size={18} /> Fácil
+                  </button>
+                  <button type="button" className={`percepcao-botao ${rirAtual === 2 ? 'ativa' : ''}`} onClick={() => setRirAtual(2)}>
+                    <ThumbsUp size={18} /> Na medida
+                  </button>
+                  <button type="button" className={`percepcao-botao ${rirAtual <= 1 ? 'ativa' : ''}`} onClick={() => setRirAtual(0)}>
+                    <Flame size={18} /> Difícil
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="tabela-series">
               <div className="tabela-series-linha tabela-series-cabecalho">
                 <span>#</span><span>Rep.</span><span>Kg</span><span>RIR</span><span />
@@ -952,9 +1055,6 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
             {emPopup ? (
               <div className="popup-descanso">
-                {fase === 'descanso' && (
-                  <button className="popup-fechar" onClick={pularDescanso} title="Pular descanso"><X size={16} /></button>
-                )}
                 {fase === 'descanso' ? (
                   <>
                     <p className="rotulo-descanso"><Wind size={16} /> Descanso</p>
@@ -973,6 +1073,9 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
                       <button onClick={() => setRestante((r) => Math.max(1, r - 5))}>−5s</button>
                       <button onClick={() => setRestante((r) => r + 5)}>+5s</button>
                     </div>
+                    <button className="pular-descanso" onClick={pularDescanso}>
+                      <X size={16} /> Pular descanso
+                    </button>
                   </>
                 ) : preparando ? (
                   <>

@@ -4,7 +4,7 @@ import { DIAS_SEMANA, HORARIOS_TREINO, LOCAIS, NIVEIS_EXPERIENCIA } from '../typ
 import CorridaSection from './CorridaSection';
 import { uid } from '../storage';
 import { excluirMidias } from '../media';
-import { diaSemanaHoje, linkVideoExercicio, grupoCorporal, recordesPessoais } from '../calc';
+import { diaSemanaHoje, linkVideoExercicio, grupoCorporal, recordesPessoais, faixaCaloriasTreino } from '../calc';
 import { MediaGallery, MediaPicker } from './Midia';
 import WorkoutPlayer from './WorkoutPlayer';
 import VisaoSemana from './VisaoSemana';
@@ -281,6 +281,10 @@ export default function TreinoTab({ perfil, dados, atualizar, aoAtualizarPerfil,
           <h2><Zap size={19} /> {hojeEhDiaDeMusculacao ? 'Treino Sugerido para Hoje' : 'Próximo Treino do Seu Plano'}</h2>
           <p className="objetivo-sugerido">
             <strong>{proximoDia.objetivo}</strong> · {proximoDia.gruposMusculares} · ~{proximoDia.tempoEstimadoMin} min
+            {(() => {
+              const faixa = faixaCaloriasTreino(perfil.pesoKg, proximoDia.tempoEstimadoMin, proximoDia.exercicios.some((e) => e.grupoId));
+              return faixa ? ` · ${faixa.min}-${faixa.max} kcal` : '';
+            })()}
           </p>
           <ol className="lista-compacta-exercicios">
             {proximoDia.exercicios.slice(0, 5).map((e) => (
