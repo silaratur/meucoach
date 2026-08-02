@@ -1031,6 +1031,7 @@ button.destaque {
 }
 .tabela-series-linha:last-child { border-bottom: none; }
 .tabela-series-cabecalho { font-size: 0.68rem; color: var(--texto-suave); background: var(--superficie); text-transform: uppercase; }
+.rotulo-por-lado { display: block; font-size: 0.6rem; text-transform: none; opacity: 0.8; }
 .tabela-series-linha.atual { background: var(--tom-sucesso-bg); font-weight: 600; }
 .tabela-series-linha.feita { color: var(--texto-suave); }
 .celula-serie {
@@ -1147,6 +1148,8 @@ button.destaque {
   cursor: pointer;
 }
 .pill-acao:disabled { opacity: 0.6; cursor: default; }
+.nota-exercicio { min-height: 60px; margin: 0 0 10px; }
+.chips-reps { margin: 6px 0 0; }
 .historico-exercicio {
   background: var(--superficie);
   border: 1px solid var(--borda);
@@ -1157,10 +1160,19 @@ button.destaque {
   flex-direction: column;
   gap: 6px;
 }
-.historico-item { display: flex; justify-content: space-between; gap: 10px; font-size: 0.85rem; }
+.historico-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; font-size: 0.85rem; }
 .historico-data { color: var(--texto-suave); flex-shrink: 0; }
 .historico-series { text-align: right; }
 .historico-vazio { color: var(--texto-suave); font-size: 0.85rem; margin: 0; }
+.historico-nota {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  font-style: italic;
+}
 .pergunta-peso {
   background: var(--tom-info-bg);
   border: 1px solid var(--tom-info-borda);

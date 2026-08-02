@@ -82,6 +82,7 @@ export interface Perfil {
   equipamentosCozinha?: string; // ex.: "só fogão e panela", "tenho airfryer e forno"
   tempoParaCozinhar?: string; // ex.: "até 20 min por refeição", "só consigo cozinhar no fim de semana"
   descansoPadraoSeg: number;
+  incrementoCargaKg?: number; // menor salto de carga disponível (anilhas/placas); padrão 2,5kg
   // avaliação do aluno (anamnese de treino)
   nivelExperiencia?: NivelExperiencia;
   frequenciaSemana?: number; // vezes por semana que pretende treinar
@@ -185,6 +186,7 @@ export interface SerieFeita {
 export interface ItemSessao {
   nome: string;
   seriesFeitas: SerieFeita[];
+  nota?: string; // anotação livre do aluno sobre este exercício, nesta sessão (ex.: "senti no ombro")
 }
 
 export interface SessaoTreino {

@@ -605,6 +605,18 @@ function EditorTreino({ treino, aoSalvar, aoCancelar }: { treino: Treino; aoSalv
                 <div>
                   <label>Repetições</label>
                   <input value={e.repeticoes} onChange={(ev) => setEx(i, 'repeticoes', ev.target.value)} placeholder="8-12" />
+                  <div className="chips-tipo chips-reps">
+                    {['5-8', '8-12', '12-20'].map((faixa) => (
+                      <button
+                        key={faixa}
+                        type="button"
+                        className={`chip ${e.repeticoes === faixa ? 'ativa' : ''}`}
+                        onClick={() => setEx(i, 'repeticoes', faixa)}
+                      >
+                        {faixa}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label>{ligado ? 'Descanso após o grupo (s)' : 'Descanso (s)'}</label>

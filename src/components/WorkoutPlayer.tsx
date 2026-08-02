@@ -14,7 +14,7 @@ import {
   vozDisponivel,
   type EstadoSerie,
 } from '../speech';
-import { estimarDuracaoTreinoMin, faixaCaloriasTreino, tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
+import { estimarDuracaoTreinoMin, exercicioUnilateral, faixaCaloriasTreino, tipoEquipamento, linkVideoExercicio, maiorCargaHistorica, ultimasSeriesDoExercicio } from '../calc';
 import { trocarExercicio } from '../api';
 import { urlMidia } from '../media';
 import { MediaGallery } from './Midia';
@@ -126,6 +126,7 @@ function CartaoPeekExercicio({ exercicio, sessoes, aoFechar }: { exercicio: Exer
               <span className="historico-series">
                 {h.seriesFeitas.map((s) => `${s.reps ?? '—'}×${s.cargaKg ?? '—'}kg${s.rir != null ? ` (RIR ${s.rir})` : ''}`).join(' · ')}
               </span>
+              {h.nota && <span className="historico-nota"><IconeDica size={12} /> {h.nota}</span>}
             </div>
           ))
         )}
@@ -203,6 +204,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
   const [rpe, setRpe] = useState<number | null>(null);
   const [trocando, setTrocando] = useState(false);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
+  const [mostrarNota, setMostrarNota] = useState(false);
   const [tempoTotalSeg, setTempoTotalSeg] = useState(0);
   // RIR (repetições em reserva) da série atual — editável na tabela, gravado junto com a série
   // ao concluir. Não reseta entre rodadas do mesmo exercício (só ao trocar de estação), pra
@@ -241,6 +243,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
   useEffect(() => {
     setMostrarHistorico(false);
+    setMostrarNota(false);
   }, [blocoIdx, estacaoIdx]);
 
   // Some sozinho ao avançar de verdade pra próxima estação/rodada — não deve sobreviver a uma
@@ -635,10 +638,12 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     });
   }
 
-  // Anilhas/placas de academia normalmente incrementam de 2,5 em 2,5 kg — arredonda pra esse padrão
-  // em vez de sugerir cargas como "20.6kg" que não existem na prática.
+  // Anilhas/placas de academia normalmente incrementam num salto fixo (2,5kg é o mais comum,
+  // mas academias com anilhas menores ou halteres emparelhados podem ter 1kg/1,25kg) — arredonda
+  // pra esse padrão em vez de sugerir cargas como "20.6kg" que não existem na prática do aluno.
+  const incrementoCarga = perfil.incrementoCargaKg ?? 2.5;
   function arredondar25(v: number): number {
-    return Math.round(v / 2.5) * 2.5;
+    return Math.round(v / incrementoCarga) * incrementoCarga;
   }
 
 
@@ -649,11 +654,11 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
     const atual = parseFloat(cargaUsada.replace(',', '.'));
     if (!atual || isNaN(atual)) return;
     if (resposta === 'leve') {
-      const nova = Math.max(atual + 2.5, arredondar25(atual * 1.05));
+      const nova = Math.max(atual + incrementoCarga, arredondar25(atual * 1.05));
       setCargaUsada(String(nova));
       falar(`Boa! Então sobe para ${nova} quilos na próxima série.`, { fila: true });
     } else if (resposta === 'pesado') {
-      const nova = Math.max(2.5, Math.min(atual - 2.5, arredondar25(atual * 0.92)));
+      const nova = Math.max(incrementoCarga, Math.min(atual - incrementoCarga, arredondar25(atual * 0.92)));
       setCargaUsada(String(nova));
       falar(`Sem problema. Desce para ${nova} quilos e capricha na técnica.`, { fila: true });
     } else {
@@ -932,12 +937,30 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
               <button className="pill-acao" onClick={() => setMostrarHistorico((v) => !v)}>
                 <IconeHistorico size={15} /> Histórico
               </button>
+              <button className="pill-acao" onClick={() => setMostrarNota((v) => !v)}>
+                <IconeDica size={15} /> Nota{itens[exAtualIdx]?.nota ? ' ✓' : ''}
+              </button>
               {emEstadoPronto && (
                 <button className="pill-acao" onClick={trocarExercicioAtual} disabled={trocando}>
                   {trocando ? <><IconeCoach size={15} /> Buscando...</> : <><IconeTrocar size={15} /> Trocar</>}
                 </button>
               )}
             </div>
+            {mostrarNota && (
+              <textarea
+                className="nota-exercicio"
+                value={itens[exAtualIdx]?.nota ?? ''}
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setItens((prev) => {
+                    const novo = [...prev];
+                    novo[exAtualIdx] = { ...novo[exAtualIdx], nota: valor };
+                    return novo;
+                  });
+                }}
+                placeholder="Ex.: senti no ombro, tentar pegada mais fechada na próxima..."
+              />
+            )}
             {mostrarHistorico && (
               <div className="historico-exercicio">
                 {historicoExercicio.length === 0 ? (
@@ -951,6 +974,7 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
                           .map((s) => `${s.reps ?? '—'}×${s.cargaKg ?? '—'}kg${s.rir != null ? ` (RIR ${s.rir})` : ''}`)
                           .join(' · ')}
                       </span>
+                      {h.nota && <span className="historico-nota"><IconeDica size={12} /> {h.nota}</span>}
                     </div>
                   ))
                 )}
@@ -984,7 +1008,9 @@ export default function WorkoutPlayer({ treino, perfil, sessoes, aoTerminar, aoC
 
             <div className="tabela-series">
               <div className="tabela-series-linha tabela-series-cabecalho">
-                <span>#</span><span>Rep.</span><span>Kg</span><span>RIR</span><span />
+                <span>#</span><span>Rep.</span>
+                <span>{exercicioUnilateral(exAtual.nome) ? <>Kg<small className="rotulo-por-lado">por lado</small></> : 'Kg'}</span>
+                <span>RIR</span><span />
               </div>
               {Array.from({ length: exAtual.series }, (_, i) => {
                 const serieFeita = itens[exAtualIdx]?.seriesFeitas[i];

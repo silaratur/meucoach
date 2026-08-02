@@ -164,10 +164,12 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
   // digitar de novo sem o campo "saltar" pra um valor padrão a cada tecla apertada — o padrão
   // só é aplicado quando o campo perde o foco (onBlur), não durante a digitação.
   const [descansoTexto, setDescansoTexto] = useState(String(perfil.descansoPadraoSeg));
+  const [incrementoTexto, setIncrementoTexto] = useState(String(perfil.incrementoCargaKg ?? 2.5));
 
   // Se o perfil global mudar (ex.: peso atualizado pela aba Evolução), reflete aqui.
   useEffect(() => setForm(perfil), [perfil]);
   useEffect(() => setDescansoTexto(String(perfil.descansoPadraoSeg)), [perfil.descansoPadraoSeg]);
+  useEffect(() => setIncrementoTexto(String(perfil.incrementoCargaKg ?? 2.5)), [perfil.incrementoCargaKg]);
 
   function set<K extends keyof Perfil>(campo: K, valor: Perfil[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -354,6 +356,20 @@ export default function PerfilTab({ perfil, aoSalvar, aoSair, aoExcluirConta }: 
           const valido = Number.isFinite(n) && n > 0 ? n : 90;
           set('descansoPadraoSeg', valido);
           setDescansoTexto(String(valido));
+        }}
+      />
+
+      <label>Menor incremento de carga disponível (kg)</label>
+      <input
+        type="number"
+        step="0.25"
+        value={incrementoTexto}
+        onChange={(e) => setIncrementoTexto(e.target.value)}
+        onBlur={() => {
+          const n = parseFloat(incrementoTexto.replace(',', '.'));
+          const valido = Number.isFinite(n) && n > 0 ? n : 2.5;
+          set('incrementoCargaKg', valido);
+          setIncrementoTexto(String(valido));
         }}
       />
 

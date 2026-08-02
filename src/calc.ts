@@ -199,6 +199,17 @@ export function faixaCaloriasTreino(pesoKg: number | undefined, duracaoMin: numb
   };
 }
 
+// Exercício unilateral/por lado (halteres, movimentos alternados ou explicitamente "unilateral")
+// — quando é o caso, a carga registrada vale PRA CADA LADO, não pro total levantado, e vale
+// deixar isso explícito no rótulo da coluna de carga (evita o aluno achar que "10" é o par).
+// Heurística por nome (sem campo estruturado, mesmo princípio de tipoEquipamento/grupoCorporal) —
+// deliberadamente NÃO inclui "lateral" sozinho, porque máquinas bilaterais como "Puxada Lateral"
+// dariam falso positivo.
+export function exercicioUnilateral(nomeExercicio: string): boolean {
+  const n = nomeExercicio.toLowerCase();
+  return /(halter|dumbbell|unilateral|alternad|com um bra[çc]o|com uma perna)/.test(n);
+}
+
 // Categoria de equipamento inferida pelo nome do exercício — não há campo estruturado de
 // equipamento hoje, então isso é uma heurística client-side (sem mudar schema/prompt).
 // O componente mapeia cada categoria para um ícone (ver ICONE_EQUIPAMENTO em Icones.tsx).
@@ -231,13 +242,13 @@ export function ultimasSeriesDoExercicio(
   sessoes: SessaoTreino[],
   nomeExercicio: string,
   limite = 3,
-): { data: string; seriesFeitas: SerieFeita[] }[] {
+): { data: string; seriesFeitas: SerieFeita[]; nota?: string }[] {
   const nome = nomeExercicio.trim().toLowerCase();
-  const resultado: { data: string; seriesFeitas: SerieFeita[] }[] = [];
+  const resultado: { data: string; seriesFeitas: SerieFeita[]; nota?: string }[] = [];
   for (const s of sessoes) {
     if (resultado.length >= limite) break;
     const item = s.itens.find((i) => i.nome.trim().toLowerCase() === nome);
-    if (item && item.seriesFeitas.length) resultado.push({ data: s.data, seriesFeitas: item.seriesFeitas });
+    if (item && item.seriesFeitas.length) resultado.push({ data: s.data, seriesFeitas: item.seriesFeitas, nota: item.nota });
   }
   return resultado;
 }
